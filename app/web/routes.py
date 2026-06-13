@@ -18,7 +18,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
-templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+logger.info("templates dir: %s (exists=%s)", _TEMPLATES_DIR, _TEMPLATES_DIR.exists())
+try:
+    templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+except Exception as _e:
+    logger.error("Jinja2Templates init failed: %s", _e)
+    templates = None
 
 _CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "cache"
 
@@ -45,7 +50,13 @@ def _get_cache_date() -> str:
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def home(request: Request):
-    return templates.TemplateResponse("home.html", {"request": request})
+    if templates is None:
+        return HTMLResponse(f"<pre>Templates not initialized. Dir: {_TEMPLATES_DIR} exists={_TEMPLATES_DIR.exists()}</pre>", status_code=500)
+    try:
+        return templates.TemplateResponse("home.html", {"request": request})
+    except Exception as exc:
+        logger.error("/: template error: %s", exc, exc_info=True)
+        return HTMLResponse(f"<pre>Template error: {exc}</pre>", status_code=500)
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
