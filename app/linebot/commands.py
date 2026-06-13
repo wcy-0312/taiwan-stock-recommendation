@@ -1,20 +1,28 @@
 """
 app/linebot/commands.py — Parse and dispatch LINE Bot interactive commands.
 
+V4 changes:
+  - Uses app.cache.latest_cache (holiday-safe cache module)
+  - New 新聞 / 市場新聞 / 市場事件 command (WS-2D)
+  - Unknown command text updated (WS-4F1)
+  - Hot stocks updated with 2412/2891 (WS-4F2)
+  - 我的清單 now uses find_stock_in_latest_cache (WS-4F3)
+
 Supported commands (case-insensitive, leading/trailing whitespace ignored):
 
-    查 <CODE>       — Query latest radar result for a stock code
-    <4-digit>       — Bare 4-digit number treated as alias for 查 <CODE>
-    今日雷達         — Return today's broadcast summary from cache
-    強勢股           — Top 5 bullish stocks from latest cache
-    轉弱股           — Top 5 bearish stocks from latest cache
-    熱門股票         — Hot stocks quick-access menu
-    可查股票         — List first 20 tickers in the universe
-    追蹤 <CODE>     — Add a stock to the user's watchlist
-    移除 <CODE>     — Remove a stock from the user's watchlist
-    我的清單         — List the user's watchlist (with radar data when available)
-    幫助 / help     — Return the help text
-    你好 / 嗨 / hi  — Greeting
+    查 <CODE>                    — Query latest radar result for a stock code
+    <4-digit>                    — Bare 4-digit number treated as alias for 查 <CODE>
+    今日雷達                       — Return today's broadcast summary from cache
+    強勢股                         — Top 5 bullish stocks from latest cache
+    轉弱股                         — Top 5 bearish stocks from latest cache
+    熱門股票                       — Hot stocks quick-access menu
+    可查股票                       — List first 20 tickers in the universe
+    新聞 / 市場新聞 / 市場事件      — Latest market events Flex Message
+    追蹤 <CODE>                   — Add a stock to the user's watchlist
+    移除 <CODE>                   — Remove a stock from the user's watchlist
+    我的清單                       — List the user's watchlist (with radar data)
+    幫助 / help                    — Return the help text
+    你好 / 嗨 / hi                 — Greeting
 
 Unknown messages return a friendly prompt with Quick Reply.
 
@@ -42,6 +50,7 @@ from app.linebot.flex_templates import (
     quick_reply_item,
     stock_summary_flex,
     watchlist_flex,
+    news_flex,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +69,7 @@ _RE_STRONG = re.compile(r"^強勢股$", re.UNICODE)
 _RE_WEAK = re.compile(r"^轉弱股$", re.UNICODE)
 _RE_HOT = re.compile(r"^熱門股票$", re.UNICODE)
 _RE_LIST_UNIVERSE = re.compile(r"^可查股票$", re.UNICODE)
+_RE_NEWS = re.compile(r"^(新聞|市場新聞|市場事件)$", re.UNICODE)
 _RE_HELP = re.compile(r"^(幫助|help|Help|HELP|功能|怎麼用)$", re.UNICODE)
 _RE_GREET = re.compile(r"^(你好|嗨|hi|hello|哈囉|Hello|HI|HELLO)$", re.UNICODE | re.IGNORECASE)
 
@@ -90,99 +100,80 @@ def _text_msg(text: str, quick_reply_obj: Optional[dict] = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Cache helpers
+# Cache helpers (V4: use latest_cache module)
 # ---------------------------------------------------------------------------
 
 def _get_cached_radar(ticker: str) -> Optional[object]:
     """
     Try to load the most recent cached analysis result for a ticker.
-
-    Searches data/cache/analysis_<date>.json (most recent first).
+    Uses find_stock_in_latest_cache (holiday-safe).
     Returns a StockRadarResult-like object or None if not found.
     """
     try:
-        from app.config import CACHE_DIR
+        from app.cache.latest_cache import find_stock_in_latest_cache
         from app.scoring.models import StockRadarResult
 
-        cache_files = sorted(CACHE_DIR.glob("analysis_*.json"), reverse=True)
-        for cache_file in cache_files[:3]:  # check last 3 days
-            with cache_file.open(encoding="utf-8") as fh:
-                data = json.load(fh)
-            for r in data.get("results", []):
-                if r.get("ticker", "").upper() == ticker.upper():
-                    return StockRadarResult(
-                        ticker=r["ticker"],
-                        code=r.get("code", ticker.replace(".TW", "")),
-                        name=r.get("name", r.get("code", "")),
-                        data_date=r.get("data_date", "—"),
-                        latest_close=float(r.get("latest_close") or 0),
-                        price_change_1d_pct=float(r.get("price_change_1d_pct") or 0),
-                        price_change_5d_pct=float(r.get("price_change_5d_pct") or 0),
-                        radar_score=int(r.get("radar_score") or 0),
-                        rank_in_universe=int(r.get("rank_in_universe") or 0),
-                        universe_size=int(r.get("universe_size") or 0),
-                        direction=r.get("direction", "neutral"),
-                        confidence=r.get("confidence", "低"),
-                        trend_score=int(r.get("trend_score") or 0),
-                        momentum_score=int(r.get("momentum_score") or 0),
-                        volume_score=int(r.get("volume_score") or 0),
-                        risk_score=int(r.get("risk_score") or 0),
-                        market_score=int(r.get("market_score") or 0),
-                        chip_score=r.get("chip_score"),
-                        ma5=float(r.get("ma5") or 0),
-                        ma20=float(r.get("ma20") or 0),
-                        ma60=r.get("ma60"),
-                        rsi14=float(r.get("rsi14") or 0),
-                        macd_hist=float(r.get("macd_hist") or 0),
-                        macd_hist_delta=float(r.get("macd_hist_delta") or 0),
-                        volume_ratio=float(r.get("volume_ratio") or 1.0),
-                        atr14=float(r.get("atr14") or 0),
-                        atr_pct=float(r.get("atr_pct") or 0),
-                        support_20d=float(r.get("support_20d") or 0),
-                        resistance_20d=float(r.get("resistance_20d") or 0),
-                        positive_reasons=r.get("positive_reasons") or [],
-                        negative_reasons=r.get("negative_reasons") or [],
-                        risk_notes=r.get("risk_notes") or [],
-                        invalidation_conditions=r.get("invalidation_conditions") or [],
-                        historical_win_rate_5d=r.get("historical_win_rate_5d"),
-                        historical_avg_return_5d=r.get("historical_avg_return_5d"),
-                        historical_win_rate_10d=r.get("historical_win_rate_10d"),
-                        historical_avg_return_10d=r.get("historical_avg_return_10d"),
-                    )
+        r = find_stock_in_latest_cache(ticker)
+        if r is None:
+            return None
+
+        return StockRadarResult(
+            ticker=r["ticker"],
+            code=r.get("code", ticker.replace(".TW", "")),
+            name=r.get("name", r.get("code", "")),
+            data_date=r.get("data_date", "—"),
+            latest_close=float(r.get("latest_close") or 0),
+            price_change_1d_pct=float(r.get("price_change_1d_pct") or 0),
+            price_change_5d_pct=float(r.get("price_change_5d_pct") or 0),
+            radar_score=int(r.get("radar_score") or 0),
+            rank_in_universe=int(r.get("rank_in_universe") or 0),
+            universe_size=int(r.get("universe_size") or 0),
+            direction=r.get("direction", "neutral"),
+            confidence=r.get("confidence", "低"),
+            trend_score=int(r.get("trend_score") or 0),
+            momentum_score=int(r.get("momentum_score") or 0),
+            volume_score=int(r.get("volume_score") or 0),
+            risk_score=int(r.get("risk_score") or 0),
+            market_score=int(r.get("market_score") or 0),
+            chip_score=r.get("chip_score"),
+            ma5=float(r.get("ma5") or 0),
+            ma20=float(r.get("ma20") or 0),
+            ma60=r.get("ma60"),
+            rsi14=float(r.get("rsi14") or 0),
+            macd_hist=float(r.get("macd_hist") or 0),
+            macd_hist_delta=float(r.get("macd_hist_delta") or 0),
+            volume_ratio=float(r.get("volume_ratio") or 1.0),
+            atr14=float(r.get("atr14") or 0),
+            atr_pct=float(r.get("atr_pct") or 0),
+            support_20d=float(r.get("support_20d") or 0),
+            resistance_20d=float(r.get("resistance_20d") or 0),
+            positive_reasons=r.get("positive_reasons") or [],
+            negative_reasons=r.get("negative_reasons") or [],
+            risk_notes=r.get("risk_notes") or [],
+            invalidation_conditions=r.get("invalidation_conditions") or [],
+            historical_win_rate_5d=r.get("historical_win_rate_5d"),
+            historical_avg_return_5d=r.get("historical_avg_return_5d"),
+            historical_win_rate_10d=r.get("historical_win_rate_10d"),
+            historical_avg_return_10d=r.get("historical_avg_return_10d"),
+        )
     except Exception as exc:
         logger.warning("_get_cached_radar: could not load cache — %s", exc)
     return None
 
 
-def _get_today_cache_raw() -> Optional[dict]:
-    """
-    Load today's raw cache dict or None if not available.
-    Returns the parsed JSON dict (keys: market_stats, results).
-    """
-    try:
-        from app.config import CACHE_DIR
-        today = datetime.today().strftime("%Y-%m-%d")
-        cache_file = CACHE_DIR / f"analysis_{today}.json"
-        if not cache_file.exists():
-            return None
-        with cache_file.open(encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception as exc:
-        logger.warning("_get_today_cache_raw: error — %s", exc)
-        return None
-
-
 def _get_today_cached_summary() -> Optional[str]:
     """
-    Load today's broadcast summary from cache.
+    Load broadcast summary from the most recent cache (holiday-safe).
     Returns a formatted string or None.
     """
     try:
-        today = datetime.today().strftime("%Y-%m-%d")
-        data = _get_today_cache_raw()
+        from app.cache.latest_cache import load_latest_analysis_cache, get_latest_analysis_date
+
+        data = load_latest_analysis_cache()
         if data is None:
             return None
 
+        data_date = get_latest_analysis_date()
         market_stats = data.get("market_stats", {})
         results_raw = data.get("results", [])
 
@@ -194,7 +185,7 @@ def _get_today_cached_summary() -> Optional[str]:
         weak = [r for r in results_raw if r.get("direction") == "bearish"][:2]
 
         lines = [
-            f"📊 台股技術雷達 {today}",
+            f"📊 台股智能雷達 {data_date}",
             "─" * 24,
             f"市場環境：{bull_count}/{universe_size} 偏多｜市場分數：{mkt_score}/10",
             "─" * 24,
@@ -215,6 +206,13 @@ def _get_today_cached_summary() -> Optional[str]:
                 rs = int(r.get("radar_score") or 0)
                 lines.append(f"  #{i} {code} {name} 雷達:{rs}")
         lines.append("─" * 24)
+
+        # Show data date label if not today (holiday indicator)
+        from datetime import date as _date
+        today_str = _date.today().isoformat()
+        if data_date != today_str and data_date != "—":
+            lines.append(f"資料日期: {data_date} 收盤")
+
         lines.append("以上僅為量化技術觀察，不構成投資建議。")
         return "\n".join(lines)
     except Exception as exc:
@@ -232,44 +230,26 @@ def _has_recent_cache() -> bool:
 
 
 def _get_strong_stocks(top_n: int = 5) -> list[dict]:
-    """
-    Return top N bullish stocks from the most recent cache file.
-    Each item is a raw result dict from the cache JSON.
-    """
+    """Return top N bullish stocks from the most recent cache file."""
     try:
-        from app.config import CACHE_DIR
-        cache_files = sorted(CACHE_DIR.glob("analysis_*.json"), reverse=True)
-        for cache_file in cache_files[:3]:
-            with cache_file.open(encoding="utf-8") as fh:
-                data = json.load(fh)
-            results = data.get("results", [])
-            bullish = [r for r in results if r.get("direction") == "bullish"]
-            # Sort by radar_score descending
-            bullish.sort(key=lambda r: int(r.get("radar_score") or 0), reverse=True)
-            if bullish:
-                return bullish[:top_n]
+        from app.cache.latest_cache import list_latest_results
+        results = list_latest_results()
+        bullish = [r for r in results if r.get("direction") == "bullish"]
+        bullish.sort(key=lambda r: int(r.get("radar_score") or 0), reverse=True)
+        return bullish[:top_n]
     except Exception as exc:
         logger.warning("_get_strong_stocks: error — %s", exc)
     return []
 
 
 def _get_weak_stocks(top_n: int = 5) -> list[dict]:
-    """
-    Return top N bearish stocks from the most recent cache file.
-    Each item is a raw result dict from the cache JSON.
-    """
+    """Return top N bearish stocks from the most recent cache file."""
     try:
-        from app.config import CACHE_DIR
-        cache_files = sorted(CACHE_DIR.glob("analysis_*.json"), reverse=True)
-        for cache_file in cache_files[:3]:
-            with cache_file.open(encoding="utf-8") as fh:
-                data = json.load(fh)
-            results = data.get("results", [])
-            bearish = [r for r in results if r.get("direction") == "bearish"]
-            # Sort by radar_score ascending (weakest first)
-            bearish.sort(key=lambda r: int(r.get("radar_score") or 0))
-            if bearish:
-                return bearish[:top_n]
+        from app.cache.latest_cache import list_latest_results
+        results = list_latest_results()
+        bearish = [r for r in results if r.get("direction") == "bearish"]
+        bearish.sort(key=lambda r: int(r.get("radar_score") or 0))
+        return bearish[:top_n]
     except Exception as exc:
         logger.warning("_get_weak_stocks: error — %s", exc)
     return []
@@ -284,7 +264,6 @@ def _load_universe_tickers() -> list[str]:
         from app.config import TW0050_UNIVERSE_PATH
         with TW0050_UNIVERSE_PATH.open(encoding="utf-8") as fh:
             data = json.load(fh)
-        # Universe file may be a list of strings or list of dicts with "ticker" key
         if isinstance(data, list):
             tickers = []
             for item in data:
@@ -295,7 +274,6 @@ def _load_universe_tickers() -> list[str]:
                     tickers.append(code.replace(".TW", "").strip())
             return [t for t in tickers if t]
         elif isinstance(data, dict):
-            # might have {"tickers": [...]}
             raw = data.get("tickers", data.get("stocks", []))
             tickers = []
             for item in raw:
@@ -307,6 +285,21 @@ def _load_universe_tickers() -> list[str]:
             return [t for t in tickers if t]
     except Exception as exc:
         logger.warning("_load_universe_tickers: could not load universe — %s", exc)
+    return []
+
+
+def _load_market_events() -> list[dict]:
+    """Load market events from data/market_events/latest.json."""
+    try:
+        from pathlib import Path
+        events_path = Path(__file__).parent.parent.parent / "data" / "market_events" / "latest.json"
+        if not events_path.exists():
+            return []
+        with events_path.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data.get("events", [])
+    except Exception as exc:
+        logger.warning("_load_market_events: %s", exc)
     return []
 
 
@@ -376,6 +369,10 @@ def dispatch_command(user_id: str, text: str) -> list[dict]:
     if _RE_LIST_UNIVERSE.match(text):
         return _handle_list_universe()
 
+    # ── 新聞 / 市場新聞 / 市場事件 ──────────────────────────────────────────
+    if _RE_NEWS.match(text):
+        return _handle_news()
+
     # ── 追蹤 <CODE> ──────────────────────────────────────────────────────────
     m = _RE_ADD.match(text)
     if m:
@@ -438,7 +435,6 @@ def _handle_stock_query(raw_code: str) -> list[dict]:
         quick_reply_item(f"🔖 追蹤 {code}", f"追蹤 {code}"),
     ])
     flex = stock_summary_flex(result, add_watchlist_btn=True)
-    # Attach Quick Reply to the flex message
     flex["quickReply"] = after_qr
     return [flex]
 
@@ -467,7 +463,6 @@ def _handle_strong_stocks() -> list[dict]:
     lines.append("─" * 20)
     lines.append("以上僅為量化技術觀察，不構成投資建議。")
 
-    # Add home shortcuts after stock items (cap at 13 total)
     qr_items.append(quick_reply_item("⚠️ 轉弱股", "轉弱股"))
     qr_items.append(quick_reply_item("📊 今日雷達", "今日雷達"))
 
@@ -503,8 +498,22 @@ def _handle_weak_stocks() -> list[dict]:
     return [_text_msg("\n".join(lines), quick_reply(qr_items))]
 
 
+def _handle_news() -> list[dict]:
+    """Handle 新聞 / 市場新聞 / 市場事件 command (WS-2D)."""
+    events = _load_market_events()
+    if not events:
+        return [_text_msg(
+            "目前無市場事件資訊，請稍後再試。",
+            HOME_QUICK_REPLY,
+        )]
+    flex = news_flex(events[:5])
+    flex["quickReply"] = HOME_QUICK_REPLY
+    return [flex]
+
+
 def _handle_watchlist(user_id: str) -> list[dict]:
-    """Handle 我的清單 — show watchlist with radar data when available."""
+    """Handle 我的清單 — show watchlist with radar data when available.
+    V4: uses find_stock_in_latest_cache for data_date label."""
     tickers = get_watchlist(user_id)
     if not tickers:
         return [_text_msg(
@@ -513,7 +522,7 @@ def _handle_watchlist(user_id: str) -> list[dict]:
             HOME_QUICK_REPLY,
         )]
 
-    # Try to fetch cached radar data for each ticker
+    # Fetch cached radar data for each ticker
     results: dict = {}
     for ticker in tickers:
         r = _get_cached_radar(ticker)
@@ -521,7 +530,6 @@ def _handle_watchlist(user_id: str) -> list[dict]:
             results[ticker] = r
 
     if results:
-        # Use flex carousel when radar data is available
         flex = watchlist_flex(tickers, results)
         flex["quickReply"] = HOME_QUICK_REPLY
         return [flex]

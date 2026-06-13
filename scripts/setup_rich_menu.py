@@ -65,14 +65,39 @@ def create_rich_menu(base_url=""):
     result = _api("POST", "/v2/bot/richmenu", rich_menu)
     rich_menu_id = result["richMenuId"]
     print(f"[OK] Created Rich Menu: {rich_menu_id}")
+
+    # Upload local assets/rich_menu.png
+    image_path = Path(__file__).parent.parent / "assets" / "rich_menu.png"
+    if image_path.exists():
+        _upload_rich_menu_image(rich_menu_id, image_path)
+    else:
+        print(f"[WARN] assets/rich_menu.png not found — skipping image upload.")
+        print("       Run: python scripts/generate_rich_menu_image.py")
+
     # Set as default
     _api("POST", f"/v2/bot/user/all/richmenu/{rich_menu_id}")
     print(f"[OK] Set as default Rich Menu")
-    print()
-    print("NOTE: You still need to upload a Rich Menu image (2500x1686px) via:")
-    print(f"  POST https://api-data.line.me/v2/bot/richmenu/{rich_menu_id}/content")
-    print("  Content-Type: image/png or image/jpeg")
     return rich_menu_id
+
+def _upload_rich_menu_image(rich_menu_id: str, image_path: Path) -> None:
+    """Upload the local PNG image to LINE API."""
+    token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+    url = f"https://api-data.line.me/v2/bot/richmenu/{rich_menu_id}/content"
+    with image_path.open("rb") as f:
+        image_data = f.read()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "image/png",
+    }
+    req = urllib.request.Request(url, data=image_data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp.read()
+        print(f"[OK] Uploaded Rich Menu image: {image_path.name}")
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()
+        print(f"[ERROR] Image upload failed: HTTP {e.code} — {err}")
+
 
 def delete_all_rich_menus():
     result = _api("GET", "/v2/bot/richmenu/list")

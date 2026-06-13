@@ -2,6 +2,10 @@
 {% block title %}{{ code }} — 台股智能雷達{% endblock %}
 {% block head %}
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+.chart-loading { display:flex; align-items:center; justify-content:center; height:200px; color:#718096; font-size:14px; }
+.chart-error { display:flex; align-items:center; justify-content:center; height:120px; color:#fc8181; font-size:13px; }
+</style>
 {% endblock %}
 {% block content %}
 {% if no_data %}
@@ -91,6 +95,32 @@
   </table>
 </div>
 
+<!-- V4: Async Plotly history charts -->
+<div class="card">
+  <h3>📈 歷史走勢圖（近 6 個月）</h3>
+  <div id="chart-price" style="height:320px;"><div class="chart-loading">載入價格走勢中…</div></div>
+  <div id="chart-volume" style="height:180px; margin-top:12px;"><div class="chart-loading">載入成交量中…</div></div>
+  <div id="chart-rsi" style="height:180px; margin-top:12px;"><div class="chart-loading">載入 RSI 中…</div></div>
+  <div id="chart-macd" style="height:180px; margin-top:12px;"><div class="chart-loading">載入 MACD 中…</div></div>
+</div>
+
+{% if market_events %}
+<div class="card" style="margin-top:16px;">
+  <h3>📰 相關市場事件</h3>
+  <ul style="padding-left:0; list-style:none;">
+  {% for evt in market_events %}
+  <li style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #2d3748;">
+    <div style="display:flex; gap:8px; align-items:flex-start;">
+      <span style="color:{% if evt.impact == 'positive' %}#68d391{% elif evt.impact == 'negative' %}#fc8181{% else %}#a0aec0{% endif %}; font-weight:bold; font-size:13px;">{{ evt.title }}</span>
+      <span style="color:#718096; font-size:12px; white-space:nowrap;">{{ evt.date }}</span>
+    </div>
+    <div style="color:#718096; font-size:12px; margin-top:4px;">{{ evt.category }}</div>
+  </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <script>
 var scores = [{{ r.trend_score }}, {{ r.momentum_score }}, {{ r.volume_score }}, {{ r.risk_score }}, {{ r.market_score }}];
 var labels = ['趨勢(30)', '動能(20)', '量能(20)', '風險(15)', '市場(10)'];
@@ -108,6 +138,97 @@ Plotly.newPlot('sub-score-chart', [{
   margin: { t: 10, b: 40, l: 40, r: 10 },
   height: 180,
 }, { displayModeBar: false, responsive: true });
+
+// ── Async history charts ──────────────────────────────────────────────────────
+var stockCode = '{{ code }}';
+
+function showChartError(divId, msg) {
+  document.getElementById(divId).innerHTML =
+    '<div class="chart-error">' + (msg || '無法載入圖表資料') + '</div>';
+}
+
+var _plotlyLayout = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: '#e2e8f0', size: 11 },
+  margin: { t: 10, b: 30, l: 50, r: 10 },
+  xaxis: { gridcolor: '#2d3748', type: 'date' },
+  yaxis: { gridcolor: '#2d3748' },
+};
+var _plotlyConfig = { displayModeBar: false, responsive: true };
+
+fetch('/api/stock/' + stockCode + '/history?days=120')
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) {
+      showChartError('chart-price', d.error);
+      showChartError('chart-volume', d.error);
+      showChartError('chart-rsi', d.error);
+      showChartError('chart-macd', d.error);
+      return;
+    }
+
+    // 1. Price chart (K-line + MA)
+    var priceTraces = [
+      {
+        type: 'candlestick',
+        x: d.dates, open: d.open, high: d.high, low: d.low, close: d.close,
+        name: '價格',
+        increasing: { line: { color: '#68d391' } },
+        decreasing: { line: { color: '#fc8181' } },
+      },
+      { type: 'scatter', x: d.dates, y: d.ma5,  mode: 'lines', name: 'MA5',  line: { color: '#f6ad55', width: 1 } },
+      { type: 'scatter', x: d.dates, y: d.ma20, mode: 'lines', name: 'MA20', line: { color: '#63b3ed', width: 1 } },
+      { type: 'scatter', x: d.dates, y: d.ma60, mode: 'lines', name: 'MA60', line: { color: '#fc8181', width: 1 } },
+    ];
+    document.getElementById('chart-price').innerHTML = '';
+    Plotly.newPlot('chart-price', priceTraces,
+      Object.assign({}, _plotlyLayout, { height: 300, showlegend: true,
+        legend: { bgcolor: 'rgba(0,0,0,0)', font: { color: '#e2e8f0', size: 10 } } }),
+      _plotlyConfig);
+
+    // 2. Volume chart
+    var volColors = d.close.map(function(c, i) {
+      return i === 0 ? '#63b3ed' : (c >= d.close[i-1] ? '#68d391' : '#fc8181');
+    });
+    document.getElementById('chart-volume').innerHTML = '';
+    Plotly.newPlot('chart-volume',
+      [{ type: 'bar', x: d.dates, y: d.volume, name: '成交量', marker: { color: volColors } }],
+      Object.assign({}, _plotlyLayout, { height: 160, yaxis: Object.assign({}, _plotlyLayout.yaxis, { title: '成交量' }) }),
+      _plotlyConfig);
+
+    // 3. RSI chart
+    document.getElementById('chart-rsi').innerHTML = '';
+    Plotly.newPlot('chart-rsi',
+      [
+        { type: 'scatter', x: d.dates, y: d.rsi, mode: 'lines', name: 'RSI(14)', line: { color: '#f6ad55', width: 1.5 } },
+        { type: 'scatter', x: d.dates, y: d.dates.map(function() { return 70; }), mode: 'lines', name: '超買 70', line: { color: '#fc8181', width: 1, dash: 'dot' } },
+        { type: 'scatter', x: d.dates, y: d.dates.map(function() { return 30; }), mode: 'lines', name: '超賣 30', line: { color: '#68d391', width: 1, dash: 'dot' } },
+      ],
+      Object.assign({}, _plotlyLayout, { height: 160, yaxis: Object.assign({}, _plotlyLayout.yaxis, { range: [0, 100], title: 'RSI' }) }),
+      _plotlyConfig);
+
+    // 4. MACD chart
+    var histColors = d.macd_hist.map(function(v) { return v >= 0 ? '#68d391' : '#fc8181'; });
+    document.getElementById('chart-macd').innerHTML = '';
+    Plotly.newPlot('chart-macd',
+      [
+        { type: 'bar',    x: d.dates, y: d.macd_hist,   name: 'Histogram', marker: { color: histColors } },
+        { type: 'scatter', x: d.dates, y: d.macd,        mode: 'lines', name: 'MACD',   line: { color: '#63b3ed', width: 1.5 } },
+        { type: 'scatter', x: d.dates, y: d.macd_signal, mode: 'lines', name: 'Signal', line: { color: '#f6ad55', width: 1.5 } },
+      ],
+      Object.assign({}, _plotlyLayout, { height: 160,
+        legend: { bgcolor: 'rgba(0,0,0,0)', font: { color: '#e2e8f0', size: 10 } },
+        showlegend: true }),
+      _plotlyConfig);
+  })
+  .catch(function(err) {
+    showChartError('chart-price', '圖表資料載入失敗，請稍後再試。');
+    showChartError('chart-volume', '');
+    showChartError('chart-rsi', '');
+    showChartError('chart-macd', '');
+    console.error('History chart fetch error:', err);
+  });
 </script>
 {% endif %}
 <p style="color:#4a5568; text-align:center; margin-top:32px; font-size:12px;">以上僅為量化技術觀察，不構成投資建議。</p>

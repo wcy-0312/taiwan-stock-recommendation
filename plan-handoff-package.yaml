@@ -1,0 +1,258 @@
+schema_version: "plan-handoff-package-v1"
+project_title: "台股智能雷達 V4 產品驗收修正"
+project_stage: "mid-project"
+plan_status: "confirmed"
+
+# ─────────────────────────────────────────────
+# Required Capabilities
+# ─────────────────────────────────────────────
+required_capabilities:
+  - capability: "Python FastAPI route + async endpoint authoring"
+    purpose: "Add /api/stock/{code}/history and update all existing routes"
+    criticality: high
+
+  - capability: "LINE Messaging API — Flex Message + Rich Menu"
+    purpose: "Update commands, add news command, generate and upload Rich Menu image"
+    criticality: high
+
+  - capability: "Pillow image generation"
+    purpose: "Generate 2500x1686 Rich Menu image with CJK font fallback"
+    criticality: high
+
+  - capability: "yfinance data retrieval + technical indicator calculation"
+    purpose: "Fetch OHLCV, compute MA5/MA20/MA60, RSI, MACD for history API"
+    criticality: high
+
+  - capability: "Plotly.js async chart rendering in Jinja2 template"
+    purpose: "Render 4 interactive charts on /stock/{code} page after page load"
+    criticality: high
+
+  - capability: "Python module design — public API encapsulation"
+    purpose: "Create app/cache/latest_cache.py with clean public interface"
+    criticality: high
+
+  - capability: "pytest test authoring with monkeypatch"
+    purpose: "Write 10 test scenarios covering all new functionality"
+    criticality: medium
+
+  - capability: "Jinja2 template modification"
+    purpose: "Update dashboard.html, stock.html for news section and charts"
+    criticality: medium
+
+  - capability: "Markdown technical writing"
+    purpose: "Write operator-guide P0 troubleshooting and v4 acceptance report"
+    criticality: low
+
+# ─────────────────────────────────────────────
+# Suggested Workstreams
+# ─────────────────────────────────────────────
+suggested_workstreams:
+  - id: "WS-1"
+    name: "基礎修正 (A + B + C)"
+    objective: >
+      統一產品名稱為「台股智能雷達」；將 PUBLIC_BASE_URL 接線至所有 LINE 指令入口；
+      建立 app/cache/latest_cache.py 模組取代所有本地快取載入邏輯，支援假日讀取最近可用資料。
+    required_capabilities:
+      - "Python FastAPI route + async endpoint authoring"
+      - "LINE Messaging API — Flex Message + Rich Menu"
+      - "Python module design — public API encapsulation"
+    notes_for_organization_design: >
+      A/B/C 有依賴關係：C 的模組需先建立，B 和 C 都要修改 commands.py，
+      建議單一 Executor 循序完成，避免合併衝突。
+
+  - id: "WS-2"
+    name: "新聞模組 (D)"
+    objective: >
+      新增 LINE 「新聞」/「市場新聞」/「市場事件」指令；
+      升級 data/market_events/latest.json schema；
+      dashboard.html 新增市場事件側欄；stock.html 新增相關事件區塊。
+    required_capabilities:
+      - "LINE Messaging API — Flex Message + Rich Menu"
+      - "Jinja2 template modification"
+    notes_for_organization_design: >
+      可與 WS-3 平行，但需 WS-1 的 latest_cache 模組先存在（WS-2 不直接依賴，
+      但 commands.py 已被 WS-1 修改，需要在 WS-1 完成後 rebase）。
+
+  - id: "WS-3"
+    name: "Rich Menu 圖片 (E)"
+    objective: >
+      建立 scripts/generate_rich_menu_image.py（Pillow，2500x1686，6格，字型 fallback）；
+      本地執行後提交 assets/rich_menu.png；
+      更新 scripts/setup_rich_menu.py 讀取已提交的圖片並上傳至 LINE。
+    required_capabilities:
+      - "Pillow image generation"
+      - "LINE Messaging API — Flex Message + Rich Menu"
+    notes_for_organization_design: >
+      圖片生成和上傳腳本可獨立完成。
+      圖片需在 Windows 本機執行 generate script 後提交。
+      Render 不需要重新生成。
+
+  - id: "WS-4"
+    name: "LINE UX 修正 (F)"
+    objective: >
+      修正未知指令回應文案；更新熱門股票清單（加入 2412/2891）；
+      我的清單指令顯示完整資料（名稱/分數/方向/信心度/日期/連結）。
+    required_capabilities:
+      - "LINE Messaging API — Flex Message + Rich Menu"
+      - "Python module design — public API encapsulation"
+    notes_for_organization_design: >
+      依賴 WS-1 的 find_stock_in_latest_cache()（我的清單完整資料需要它）。
+      未知指令和熱門股票可提前並行。
+
+  - id: "WS-5"
+    name: "Web 歷史圖表 (G)"
+    objective: >
+      新增 /api/stock/{code}/history?days=120 endpoint（yfinance + 技術指標計算）；
+      stock.html 加入 async JS fetch + 4 個 Plotly 圖表（價格/成交量/RSI/MACD）；
+      yfinance 失敗時友善降級（HTTP 200 + error JSON，前端顯示錯誤訊息不崩潰）。
+    required_capabilities:
+      - "Python FastAPI route + async endpoint authoring"
+      - "yfinance data retrieval + technical indicator calculation"
+      - "Plotly.js async chart rendering in Jinja2 template"
+      - "Jinja2 template modification"
+    notes_for_organization_design: >
+      可與 WS-2/WS-3/WS-4 完全平行。
+      history API 邏輯需封裝乾淨以便未來替換快取來源。
+
+  - id: "WS-6"
+    name: "文件與測試 (H + I + J)"
+    objective: >
+      operator-guide.md 新增 P0 LINE OA 自動回覆 troubleshooting；
+      撰寫 10 個測試情境（tests/ 下）；
+      建立 docs/v4-acceptance-report.md 驗收報告框架。
+    required_capabilities:
+      - "pytest test authoring with monkeypatch"
+      - "Markdown technical writing"
+    notes_for_organization_design: >
+      測試必須在 WS-1 到 WS-5 完成後才能全部通過，
+      但骨架可提前撰寫。H 和 J 文件無依賴，可最先完成。
+
+# ─────────────────────────────────────────────
+# Information Continuity Requirements
+# ─────────────────────────────────────────────
+information_continuity_requirements:
+  - id: "ICR-1"
+    area: "Starlette/FastAPI API"
+    must_persist: >
+      TemplateResponse 必須使用新式 API：TemplateResponse(request=request, name="x.html", context={...})
+      而非舊式 TemplateResponse("x.html", {"request": request})。
+      Render 的 Starlette >= 0.37 會在舊式呼叫時拋出 unhashable type: dict。
+    importance: high
+    blocks_create_agent_organization: false
+
+  - id: "ICR-2"
+    area: "快取路徑"
+    must_persist: >
+      data/cache/analysis_*.json 的日期格式為 YYYY-MM-DD（如 analysis_2026-06-13.json）。
+      load_latest_analysis_cache 依檔名字母序排序取最新，不解析日期字串。
+    importance: high
+    blocks_create_agent_organization: false
+
+  - id: "ICR-3"
+    area: "LINE credentials"
+    must_persist: >
+      LINE_CHANNEL_SECRET=6a2201cf4de5e6db15349c27d64a4aff 僅用於 webhook 簽名驗證，
+      不得出現在任何 source file 中，只能透過環境變數讀取。
+      .env 永不提交 git。
+    importance: high
+    blocks_create_agent_organization: false
+
+  - id: "ICR-4"
+    area: "Rich Menu 圖片"
+    must_persist: >
+      assets/rich_menu.png 需在本地 Windows 機器執行 generate_rich_menu_image.py 後提交。
+      Render 不執行生成腳本（無字型）。setup_rich_menu.py 只負責讀取已提交的圖片並上傳。
+    importance: high
+    blocks_create_agent_organization: false
+
+  - id: "ICR-5"
+    area: "yfinance 失敗處理"
+    must_persist: >
+      /api/stock/{code}/history 在 yfinance 失敗時必須回傳 HTTP 200 + {"error": "..."} JSON，
+      絕對不能讓頁面崩潰或回傳 500。前端 JS 檢查 data.error 欄位決定是否顯示錯誤訊息。
+    importance: high
+    blocks_create_agent_organization: false
+
+  - id: "ICR-6"
+    area: "PUBLIC_BASE_URL 行為"
+    must_persist: >
+      PUBLIC_BASE_URL 為空字串時：(1) 不顯示連結按鈕（不顯示壞連結）；
+      (2) 啟動時打 WARNING log；(3) /health 回傳 public_base_url_configured: false。
+      不因為 PUBLIC_BASE_URL 未設定就讓任何 endpoint 報錯。
+    importance: high
+    blocks_create_agent_organization: false
+
+  - id: "ICR-7"
+    area: "字型 fallback 順序"
+    must_persist: >
+      Rich Menu 字型搜尋順序：RICH_MENU_FONT_PATH env →
+      C:/Windows/Fonts/msjh.ttc（Windows JhengHei）→
+      /System/Library/Fonts/PingFang.ttc（macOS）→
+      /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc（Linux）→
+      PIL 預設字型（+ 警告 log）。
+    importance: medium
+    blocks_create_agent_organization: false
+
+# ─────────────────────────────────────────────
+# Open Questions
+# ─────────────────────────────────────────────
+open_questions:
+  - id: "OQ-1"
+    question: "股票歷史圖表採用哪種渲染方式（async JS vs SSR）？"
+    owner: "producer"
+    blocks_create_agent_organization: false
+    resolution: "已確認：async JS，頁面載入後 fetch /api/stock/{code}/history 再渲染"
+
+  - id: "OQ-2"
+    question: "Rich Menu 圖片如何在 Render 上供給（本地生成 vs Render 生成 vs 外部存儲）？"
+    owner: "producer"
+    blocks_create_agent_organization: false
+    resolution: "已確認：本地 Pillow 生成 → commit assets/rich_menu.png → Render 讀提交的檔案"
+
+# ─────────────────────────────────────────────
+# Decision Log
+# ─────────────────────────────────────────────
+decision_log:
+  - id: "DL-1"
+    decision: "股票走勢圖使用 async JS + /api/stock/{code}/history + Plotly.js"
+    rationale: "不阻塞頁面載入；yfinance 免費；Plotly 互動性佳；符合現有 FastAPI 架構"
+    status: confirmed
+    required_for_create_agent_organization: false
+
+  - id: "DL-2"
+    decision: "Rich Menu 圖片在本機用 Pillow 生成，提交 assets/rich_menu.png 至 repo"
+    rationale: "Render Free Tier 無中文字型；本地生成最穩定；不從網路下載字型"
+    status: confirmed
+    required_for_create_agent_organization: false
+
+  - id: "DL-3"
+    decision: "yfinance 失敗時 /api/stock/{code}/history 回 HTTP 200 + {error: '...'}"
+    rationale: "防止頁面崩潰；前端統一處理；符合 REST best practice for non-fatal errors"
+    status: confirmed
+    required_for_create_agent_organization: false
+
+  - id: "DL-4"
+    decision: "load_latest_analysis_cache 不限制資料必須是今天，取最新可用"
+    rationale: "台股六日不交易，週末若強制今天則永遠無資料，體驗極差"
+    status: confirmed
+    required_for_create_agent_organization: false
+
+  - id: "DL-5"
+    decision: "PUBLIC_BASE_URL 為空時不渲染連結按鈕"
+    rationale: "壞連結比無連結更損害使用體驗和信任感"
+    status: confirmed
+    required_for_create_agent_organization: false
+
+  - id: "DL-6"
+    decision: "artifact backend 使用 local-git（直接在 taiwan-stock-recommendation repo 提交）"
+    rationale: "專案已有 git repo，不需要額外的存放機制"
+    status: confirmed
+    required_for_create_agent_organization: true
+
+# ─────────────────────────────────────────────
+# Readiness (derived)
+# ─────────────────────────────────────────────
+readiness:
+  ready_for_create_agent_organization: true
+  derivation_rule: "plan_handoff_readiness_v1"
+  blockers: []

@@ -38,7 +38,13 @@ router = APIRouter()
 @router.get("/health")
 async def health_check() -> dict:
     """Render health check endpoint — always returns 200."""
-    return {"status": "ok"}
+    import os
+    public_base_url = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+    return {
+        "status": "ok",
+        "app": "台股智能雷達",
+        "public_base_url_configured": bool(public_base_url),
+    }
 
 
 # ---------------------------------------------------------------------------

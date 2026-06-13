@@ -1,5 +1,20 @@
 # 台股智能雷達 LINE Bot — Operator Guide
 
+## P0：LINE OA 自動回覆覆蓋 Bot 回應
+
+**症狀：** 所有訊息收到「感謝您的訊息」而非 Bot 回應。
+
+**原因：** LINE OA 的「自動回應訊息」功能開啟，會攔截 webhook。
+
+**修復步驟：**
+1. 進入 LINE Official Account Manager → 回應設定
+2. 「自動回應訊息」→ 關閉
+3. 「Webhook」→ 啟用
+4. 確認 Webhook URL 設定正確（格式：`https://<your-app>.onrender.com/webhook`）
+5. 驗證：傳送「ping」給 Bot，應回應 Bot 的歡迎訊息或未知指令提示
+
+---
+
 ## LINE OA 回應設定檢查（必讀）
 
 LINE Official Account Manager 設定路徑：

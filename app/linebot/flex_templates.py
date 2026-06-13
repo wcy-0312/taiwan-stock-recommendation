@@ -68,7 +68,7 @@ def greeting_message() -> dict:
 def help_message() -> dict:
     """Help message with Quick Reply buttons."""
     text = (
-        "【台股技術雷達 功能】\n"
+        "【台股智能雷達 功能】\n"
         "─────────────────\n"
         "📊 今日雷達   — 今日播報摘要\n"
         "🏆 強勢股     — 強勢觀察清單\n"
@@ -87,14 +87,15 @@ def help_message() -> dict:
     }
 
 def unknown_command_message(user_text: str = "") -> dict:
-    """Friendly unknown command response with Quick Reply."""
-    preview = user_text[:15] + "…" if len(user_text) > 15 else user_text
+    """Friendly unknown command response with Quick Reply (V4 updated text)."""
     text = (
-        f"我看不懂「{preview}」，但你可以試試：\n"
-        "⬇️ 點選下方快速選單"
-    ) if preview else (
-        "我看不懂這句，但你可以試試：\n"
-        "⬇️ 點選下方快速選單"
+        "我目前還不能直接回答開放式投資問題。\n\n"
+        "可以試試：\n"
+        "• 查 2330（查個股）\n"
+        "• 強勢股\n"
+        "• 轉弱股\n"
+        "• 今日雷達\n"
+        "• 新聞"
     )
     return {
         "type": "text",
@@ -282,7 +283,7 @@ def daily_radar_flex(market_stats: dict, strong: list, weak: list) -> dict:
     mkt_score = market_stats.get("market_score", 5)
 
     body_contents = [
-        {"type": "text", "text": "📊 台股技術雷達", "weight": "bold", "size": "xl"},
+        {"type": "text", "text": "📊 台股智能雷達", "weight": "bold", "size": "xl"},
         {"type": "text", "text": f"市場：{bull_count}/{universe_size} 偏多｜市場分 {mkt_score}/10",
          "size": "sm", "color": "#888888"},
         {"type": "separator", "margin": "md"},
@@ -326,25 +327,120 @@ def daily_radar_flex(market_stats: dict, strong: list, weak: list) -> dict:
         "body": {"type": "box", "layout": "vertical", "contents": body_contents},
         "footer": {"type": "box", "layout": "vertical", "contents": footer_contents},
     }
-    return {"type": "flex", "altText": "台股技術雷達 今日播報", "contents": bubble}
+    return {"type": "flex", "altText": "台股智能雷達 今日播報", "contents": bubble}
 
 
 # ── Hot stocks list ────────────────────────────────────────────────────────────
 
 HOT_STOCKS = [
-    ("2330", "台積電"),
-    ("2317", "鴻海"),
-    ("2454", "聯發科"),
-    ("2884", "玉山金"),
-    ("2891", "中信金"),
+    {"code": "2330", "name": "台積電"},
+    {"code": "2317", "name": "鴻海"},
+    {"code": "2454", "name": "聯發科"},
+    {"code": "2412", "name": "中華電"},
+    {"code": "2891", "name": "中信金"},
 ]
 
 def hot_stocks_message() -> dict:
     """Return hot stocks with Quick Reply for each."""
-    items = [quick_reply_item(f"🔍 {code} {name}", f"查 {code}") for code, name in HOT_STOCKS]
+    items = [
+        quick_reply_item(f"🔍 {s['code']} {s['name']}", f"查 {s['code']}")
+        for s in HOT_STOCKS
+    ]
     items.append(quick_reply_item("📋 可查股票", "可查股票"))
     return {
         "type": "text",
         "text": "🔥 熱門股票快速查詢：",
         "quickReply": quick_reply(items),
+    }
+
+
+# ── News / Market Events Flex Message ─────────────────────────────────────────
+
+def news_flex(events: list[dict]) -> dict:
+    """
+    Flex Message for market events (新聞 command).
+
+    Parameters
+    ----------
+    events : list[dict] — list of event dicts with keys:
+        id, date, title, category, summary, impact
+
+    Returns
+    -------
+    dict — LINE Flex Message object (type: flex)
+    """
+    if not events:
+        return {
+            "type": "text",
+            "text": "目前無市場事件資訊，請稍後再試。",
+        }
+
+    impact_color = {
+        "positive": "#68d391",
+        "negative": "#fc8181",
+        "neutral": "#a0aec0",
+    }
+
+    body_contents: list[dict] = [
+        {"type": "text", "text": "📰 市場重要事件", "weight": "bold", "size": "lg"},
+        {"type": "separator", "margin": "md"},
+    ]
+
+    for evt in events[:5]:
+        title = evt.get("title", "")
+        date = evt.get("date", "")
+        category = evt.get("category", "")
+        impact = evt.get("impact", "neutral")
+        color = impact_color.get(impact, "#a0aec0")
+
+        body_contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": title,
+                            "weight": "bold",
+                            "size": "sm",
+                            "wrap": True,
+                            "flex": 4,
+                            "color": color,
+                        },
+                        {
+                            "type": "text",
+                            "text": date,
+                            "size": "xs",
+                            "color": "#888888",
+                            "align": "end",
+                            "flex": 2,
+                        },
+                    ],
+                },
+                {
+                    "type": "text",
+                    "text": category,
+                    "size": "xs",
+                    "color": "#888888",
+                    "margin": "xs",
+                },
+            ],
+        })
+
+    bubble = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": body_contents,
+        },
+    }
+    return {
+        "type": "flex",
+        "altText": "市場重要事件",
+        "contents": bubble,
     }

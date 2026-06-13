@@ -54,6 +54,20 @@ def _load_dotenv_if_present() -> None:
 
 _load_dotenv_if_present()
 
+# ── Warn early if PUBLIC_BASE_URL is missing ─────────────────────────────────
+def _check_public_base_url() -> None:
+    from app.config import PUBLIC_BASE_URL
+    if not PUBLIC_BASE_URL:
+        logger.warning(
+            "PUBLIC_BASE_URL not set — LINE links will be broken. "
+            "Set PUBLIC_BASE_URL to your Render URL (e.g. https://your-app.onrender.com)."
+        )
+    else:
+        logger.info("[main] PUBLIC_BASE_URL = %s", PUBLIC_BASE_URL)
+
+
+_check_public_base_url()
+
 # ── Scheduler setup ───────────────────────────────────────────────────────────
 
 _scheduler = None
@@ -218,9 +232,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # ── FastAPI application ───────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="台股技術雷達 LINE Bot",
+    title="台股智能雷達",
     description="Taiwan stock radar LINE Bot — daily broadcasts + interactive commands",
-    version="2.0.0",
+    version="4.0.0",
     lifespan=lifespan,
 )
 
