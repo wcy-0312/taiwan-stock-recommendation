@@ -39,16 +39,25 @@ Status values: `pending_review` | `approved` | `rejected` | `superseded`
 | ART-WS2-09 | WS-2 | `app/pipeline.py` | Full analysis pipeline orchestrator | approved | checkpoint-2 |
 | ART-WS2-10 | WS-2 | `app/linebot/__init__.py` | LINE Bot sub-package stub | approved | checkpoint-2 |
 | ART-WS2-11 | WS-2 | `app/backtesting/__init__.py` | Backtesting sub-package stub | approved | checkpoint-2 |
-| ART-WS3-01 | WS-3 | `app/linebot/watchlist.py` | SQLite-backed per-user watchlist CRUD | pending_review | checkpoint-3 |
-| ART-WS3-02 | WS-3 | `app/linebot/notifier.py` | LINE Messaging API push/reply client | pending_review | checkpoint-3 |
-| ART-WS3-03 | WS-3 | `app/linebot/commands.py` | Interactive command dispatcher (5 commands) | pending_review | checkpoint-3 |
-| ART-WS3-04 | WS-3 | `app/linebot/webhook.py` | FastAPI router with LINE signature verification | pending_review | checkpoint-3 |
-| ART-WS3-05 | WS-3 | `app/main.py` | FastAPI + APScheduler entry point | pending_review | checkpoint-3 |
-| ART-WS3-06 | WS-3 | `render.yaml` | Render deployment config (all 3 env vars) | pending_review | checkpoint-3 |
-| ART-WS3-07 | WS-3 | `requirements.txt` | Python dependency manifest | pending_review | checkpoint-3 |
-| ART-WS3-08 | WS-3 | `.env.example` | Updated credential template (adds LINE_CHANNEL_SECRET) | pending_review | checkpoint-3 |
-| ART-WS3-09 | WS-3 | `scheduler.py` | Backward-compat wrapper to app.pipeline (V2) | pending_review | checkpoint-3 |
-| ART-WS3-10 | WS-3 | `verify_live_send.py` | Backward-compat wrapper for live-send verification (V2) | pending_review | checkpoint-3 |
+| ART-WS3-01 | WS-3 | `app/linebot/watchlist.py` | SQLite-backed per-user watchlist CRUD | approved | checkpoint-3 |
+| ART-WS3-02 | WS-3 | `app/linebot/notifier.py` | LINE Messaging API push/reply client | approved | checkpoint-3 |
+| ART-WS3-03 | WS-3 | `app/linebot/commands.py` | Interactive command dispatcher (5 commands) | approved | checkpoint-3 |
+| ART-WS3-04 | WS-3 | `app/linebot/webhook.py` | FastAPI router with LINE signature verification | approved | checkpoint-3 |
+| ART-WS3-05 | WS-3 | `app/main.py` | FastAPI + APScheduler entry point | approved | checkpoint-3 |
+| ART-WS3-06 | WS-3 | `render.yaml` | Render deployment config (all 3 env vars) | approved | checkpoint-3 |
+| ART-WS3-07 | WS-3 | `requirements.txt` | Python dependency manifest | approved | checkpoint-3 |
+| ART-WS3-08 | WS-3 | `.env.example` | Updated credential template (adds LINE_CHANNEL_SECRET) | approved | checkpoint-3 |
+| ART-WS3-09 | WS-3 | `scheduler.py` | Backward-compat wrapper to app.pipeline (V2) | approved | checkpoint-3 |
+| ART-WS3-10 | WS-3 | `verify_live_send.py` | Backward-compat wrapper for live-send verification (V2) | approved | checkpoint-3 |
+| ART-WS4-01 | WS-4 | `app/backtesting/metrics.py` | Trade metrics: win_rate, avg_return, sharpe_ratio, max_drawdown, annualized_return | approved | checkpoint-4 |
+| ART-WS4-02 | WS-4 | `app/backtesting/engine.py` | Walk-forward backtest engine; top-N strategy; no look-ahead | approved | checkpoint-4 |
+| ART-WS4-03 | WS-4 | `scripts/backtest_strategy.py` | CLI: --universe, --start, --end, --top-n, --holding-days (comma-separated) | approved | checkpoint-4 |
+| ART-WS4-04 | WS-4 | `tests/test_backtest.py` | 26 tests: metrics, engine, CLI — all pass (no live network calls) | approved | checkpoint-4 |
+| ART-WS5-01 | WS-5 | `tests/test_scoring.py` | 56 tests: radar_score clamping, ICR-1/2/3/4 rules, sub-score bands, selection logic | approved | checkpoint-5 |
+| ART-WS5-02 | WS-5 | `tests/test_formatter.py` | 46 tests: None/nan-safety, message length limits, broadcast structure, edge cases | approved | checkpoint-5 |
+| ART-WS5-03 | WS-5 | `tests/test_commands.py` | 44 tests: command parser, watchlist CRUD, user isolation, fallback handling | approved | checkpoint-5 |
+| ART-WS5-04 | WS-5 | `docs/scoring-spec.md` | Authoritative scoring rules: all sub-score bands, direction thresholds, 5 confidence conditions, ICR rules | approved | checkpoint-5 |
+| ART-WS5-05 | WS-5 | `README.md` | V2 README: setup, backtest CLI, LINE commands, architecture, package structure, env vars | approved | checkpoint-5 |
 
 ---
 

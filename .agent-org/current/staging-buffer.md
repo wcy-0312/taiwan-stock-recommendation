@@ -45,7 +45,45 @@
 
 ---
 
+---
+
+## Current Checkpoint: 4 (Backtesting CLI Built)
+
+**Status:** WS-4 complete — all artifacts built and 26/26 tests pass.
+
+**Executor Lead:** Completed all WS-4 artifacts in a single pass.
+
+### WS-4: Backtesting System
+
+- `app/backtesting/metrics.py` — trade metrics: win_rate, avg_return, sharpe_ratio, max_drawdown, annualized_return, sample_sufficient gate
+- `app/backtesting/engine.py` — walk-forward backtest engine: fetches full history once per ticker, rebalances every N days, selects top-N by base_score, collects per-trade returns
+- `scripts/backtest_strategy.py` — CLI: --universe, --start, --end, --top-n, --holding-days (comma-sep multi-period), --rebalance, --quiet
+- `tests/test_backtest.py` — 26 tests covering metrics unit, engine (mocked), CLI; all 26 pass
+
+### Test Results (Checkpoint 4)
+
+| Test | Result |
+|------|--------|
+| TestComputeMetrics (10 tests) | ALL PASS |
+| TestFormatMetricsReport (3 tests) | ALL PASS |
+| TestComputeBaseScore (2 tests) | ALL PASS |
+| TestRunBacktest (6 tests) | ALL PASS |
+| TestCLI (5 tests) | ALL PASS |
+| **Total** | **26/26 PASS** |
+
+### Acceptance Criteria Status (Checkpoint 4)
+
+| Criterion | Status |
+|-----------|--------|
+| app/backtesting/engine.py exists and importable | VERIFIED |
+| app/backtesting/metrics.py exists and importable | VERIFIED |
+| scripts/backtest_strategy.py CLI runs --help | VERIFIED |
+| models.py has historical_* Optional[float] fields | VERIFIED (pre-existing from WS-2) |
+| python -m pytest tests/test_backtest.py passes | VERIFIED (26/26 pass) |
+| Sample_sufficient gate: < 10 trades → None fields | VERIFIED |
+| No None/nan in formatted report output | VERIFIED |
+| CLI --start required, exits nonzero on bad date | VERIFIED |
+
 ## In-Progress Notes
 
-Next checkpoint (CP-4) requires:
-- WS-4: Backtesting system (app/backtesting/engine.py, app/backtesting/metrics.py, scripts/backtest_strategy.py)
+WS-4 complete. Next: Verifier Lead to verify CP-4 acceptance criteria.

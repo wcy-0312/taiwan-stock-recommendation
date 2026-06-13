@@ -1,6 +1,10 @@
 .env
 **/.env
+.env copy.example
 __pycache__/
 *.pyc
 *.pyo
 .cache/
+.scheduler-cache/
+data/cache/
+data/watchlist.db
