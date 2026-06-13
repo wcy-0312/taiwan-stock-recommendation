@@ -13,19 +13,31 @@
 | 中上 | 🏆 強勢排行 | **uri** | `{PUBLIC_BASE_URL}/dashboard?tab=strong` | 強勢股排行 |
 | 右上 | ⚠️ 風險警示 | **uri** | `{PUBLIC_BASE_URL}/dashboard?tab=weak` | 轉弱警示 |
 | 左下 | 🔍 查詢個股 | **uri** | `{PUBLIC_BASE_URL}/search` | 搜尋頁（支援輸入代號） |
-| 中下 | 📋 我的追蹤 | **message** | `我的清單` | 暫時保留 message，見下方說明 |
+| 中下 | 📋 我的追蹤 | **uri** | `{PUBLIC_BASE_URL}/watchlist` | LIFF 頁面，需設定 LIFF_ID |
 | 右下 | 📰 市場事件 | **uri** | `{PUBLIC_BASE_URL}/dashboard#events` | 市場事件側欄 |
 
-**URI 格數：5 / 6　　Message 格數：1 / 6**
+**URI 格數：6 / 6　　Message 格數：0 / 6**
 
 ---
 
-## 為什麼「我的追蹤」暫時保留 message？
+## 「我的追蹤」— LIFF 整合說明
 
-**現況：** 我的清單（watchlist）儲存在 SQLite，以 LINE user_id 為 key。  
-**限制：** Web 端無法可靠知道瀏覽者的 LINE user_id（需 LIFF SDK + 登入授權）。  
-**中期目標：** 接入 LIFF，讓 Web 頁面 `/watchlist` 能透過 `liff.getProfile()` 取得 user_id，改為 uri action `{PUBLIC_BASE_URL}/watchlist`。  
-**目前：** 點擊後送出文字「我的清單」，Bot 回覆清單（LINE 內完成，不依賴 Web）。
+`/watchlist` 使用 LIFF SDK (`liff.getProfile()`) 取得使用者 LINE user_id，再呼叫 `/api/watchlist?user_id={userId}` 取得個人清單。
+
+**必要環境變數：**
+| 變數 | 說明 |
+|------|------|
+| `LIFF_ID` | LINE Developers Console → channel → LIFF 頁取得，格式 `1234567890-xxxxxxxx` |
+
+**LIFF App 建立步驟：**
+1. LINE Developers Console → 你的 channel → LIFF → 新增 LIFF App
+2. Size: Tall（或 Full）
+3. Endpoint URL: `{PUBLIC_BASE_URL}/watchlist`
+4. Scope: 勾選 `profile`
+5. 複製 LIFF ID → 在 Render 設定 `LIFF_ID=<id>` → 重新部署
+6. 重新執行 `python scripts/setup_rich_menu.py --delete-all`
+
+**未設定 LIFF_ID 時：** `/watchlist` 頁面顯示設定說明，不崩潰。
 
 ---
 
@@ -62,8 +74,11 @@ python scripts/setup_rich_menu.py [--delete-all]
 
 ---
 
-## 中期路線圖
+## 環境變數
 
-| 格 | 現在 | 中期 |
-|----|------|------|
-| 我的追蹤 | message: 我的清單 | uri: `{PUBLIC_BASE_URL}/watchlist`（需 LIFF） |
+| 變數 | 必要 | 說明 |
+|------|------|------|
+| `LINE_CHANNEL_ACCESS_TOKEN` | ✅ | 上傳/建立 Rich Menu 用 |
+| `PUBLIC_BASE_URL` | ✅ | URI action base URL |
+| `LIFF_ID` | ✅（我的追蹤） | LIFF App ID，格式 `1234567890-xxxxxxxx` |
+| `RICH_MENU_FONT_PATH` | 選用 | CJK 字型路徑（否則搜尋系統字型） |

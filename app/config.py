@@ -73,3 +73,9 @@ LINE_MESSAGE_MAX_PARTS: int = 3
 # ── Web Dashboard ─────────────────────────────────────────────────────────────
 PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 # Set to your Render URL, e.g. https://taiwan-stock-radar-linebot.onrender.com
+
+# ── LIFF ──────────────────────────────────────────────────────────────────────
+LIFF_ID: str = os.getenv("LIFF_ID", "")
+# LINE LIFF App ID for /watchlist page (format: 1234567890-xxxxxxxx).
+# Create at: LINE Developers Console → your channel → LIFF → Add
+# Endpoint URL: {PUBLIC_BASE_URL}/watchlist  Scope: profile

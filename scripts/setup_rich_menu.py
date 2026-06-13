@@ -85,10 +85,10 @@ def create_rich_menu(base_url: str) -> str:
                 "bounds": {"x": 0, "y": 843, "width": 833, "height": 843},
                 "action": {"type": "uri", "uri": f"{b}/search"},
             },
-            # 我的追蹤 — message (LIFF not yet available; see docs/rich-menu-spec.md)
+            # 我的追蹤 — URI: /watchlist (LIFF page; requires LIFF_ID env on Render)
             {
                 "bounds": {"x": 833, "y": 843, "width": 833, "height": 843},
-                "action": {"type": "message", "text": "我的清單"},
+                "action": {"type": "uri", "uri": f"{b}/watchlist"},
             },
             # 市場事件 — URI: /dashboard#events
             {

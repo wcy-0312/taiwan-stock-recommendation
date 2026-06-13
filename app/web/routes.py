@@ -22,6 +22,7 @@ from app.cache.latest_cache import (
     load_latest_analysis_cache,
     get_latest_analysis_date,
     find_stock_in_latest_cache,
+    list_latest_results,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,11 +88,19 @@ async def dashboard(request: Request):
     )
 
 
+@router.get("/watchlist", response_class=HTMLResponse)
+async def watchlist_page(request: Request):
+    """LIFF-powered watchlist page — entry point from Rich Menu 我的追蹤 URI action."""
+    from app.config import LIFF_ID
+    return templates.TemplateResponse(
+        request=request, name="watchlist.html",
+        context={"liff_id": LIFF_ID},
+    )
+
+
 @router.get("/search", response_class=HTMLResponse)
 async def search_page(request: Request):
     """Stock search page — entry point from Rich Menu 查詢個股 URI action."""
-    from app.cache.latest_cache import list_latest_results
-
     results = list_latest_results()
     strong = sorted(
         [r for r in results if r.get("direction") == "bullish"],
@@ -152,6 +161,44 @@ async def stock_page(request: Request, code: str):
 
 
 # ── JSON API routes ───────────────────────────────────────────────────────────
+
+@router.get("/api/watchlist")
+async def api_watchlist(user_id: str = ""):
+    """Return a user's watchlist enriched with latest radar data.
+
+    Called by /watchlist LIFF page after liff.getProfile() resolves.
+    user_id comes from liff.getProfile().userId — channel-specific, not sensitive.
+    """
+    if not user_id:
+        return JSONResponse({"error": "user_id is required"}, status_code=400)
+
+    from app.linebot.watchlist import get_watchlist
+    tickers = get_watchlist(user_id)
+
+    data_date = get_latest_analysis_date()
+    stocks = []
+    for ticker in tickers:
+        normalized = ticker if ticker.endswith(".TW") else ticker + ".TW"
+        result = find_stock_in_latest_cache(normalized)
+        code = ticker.replace(".TW", "")
+        if result:
+            stocks.append({
+                "ticker": normalized,
+                "code": code,
+                "name": result.get("name", ""),
+                "radar_score": result.get("radar_score", 0),
+                "direction": result.get("direction", "neutral"),
+                "confidence": result.get("confidence", "低"),
+                "latest_close": result.get("latest_close", 0),
+                "price_change_1d_pct": result.get("price_change_1d_pct", 0),
+                "data_date": result.get("data_date", data_date),
+                "has_data": True,
+            })
+        else:
+            stocks.append({"ticker": normalized, "code": code, "has_data": False})
+
+    return JSONResponse({"data_date": data_date, "count": len(stocks), "stocks": stocks})
+
 
 @router.get("/api/radar/latest")
 async def api_radar_latest():
