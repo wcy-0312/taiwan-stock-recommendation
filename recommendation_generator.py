@@ -237,19 +237,41 @@ def format_line_message(recommendations: List[Recommendation], run_date: Optiona
         run_date = date.today().isoformat()
 
     header = (
-        f"📊 台股每日推薦 {run_date}\n"
+        f"📊 台股技術面雷達 {run_date}\n"
         f"{'─' * 28}\n"
         f"以下為今日技術分析結果，供參考，非投資建議。\n"
     )
 
-    sections: list[str] = []
-    for i, rec in enumerate(recommendations, start=1):
-        sections.append(rec.explanation_zh)
+    _label_display = {
+        "BUY": "技術面偏多",
+        "SELL": "技術面偏空",
+        "HOLD": "技術面觀望",
+    }
 
-    footer = (
-        "\n📌 提醒：以上分析僅基於技術指標，不保證獲利。\n"
-        "投資人請自行判斷，風險自負。"
-    )
+    buy_recs = [r for r in recommendations if r.label == "BUY"]
+    sell_recs = [r for r in recommendations if r.label == "SELL"]
+
+    sections: list[str] = []
+
+    if buy_recs:
+        buy_lines = ["🏆 技術面強勢股"]
+        for rank, rec in enumerate(buy_recs, start=1):
+            display = _ticker_display(rec.ticker)
+            signal_text = _label_display["BUY"]
+            score_text = f"分數：+{rec.composite_score} / +3"
+            buy_lines.append(f"#{rank} {display}｜{signal_text}｜{score_text}")
+        sections.append("\n".join(buy_lines))
+
+    if sell_recs:
+        sell_lines = ["⚠️ 技術面轉弱警示"]
+        for rank, rec in enumerate(sell_recs, start=1):
+            display = _ticker_display(rec.ticker)
+            signal_text = _label_display["SELL"]
+            score_text = f"分數：{rec.composite_score} / -3"
+            sell_lines.append(f"#{rank} {display}｜{signal_text}｜{score_text}")
+        sections.append("\n".join(sell_lines))
+
+    footer = "\n以上僅為技術面觀察，不構成投資建議。"
 
     body = f"\n{'─' * 28}\n".join(sections)
     return f"{header}\n{body}{footer}"
