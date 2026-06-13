@@ -222,6 +222,15 @@ def _get_today_cached_summary() -> Optional[str]:
         return None
 
 
+def _has_recent_cache() -> bool:
+    """Return True if any analysis cache file exists."""
+    try:
+        from app.config import CACHE_DIR
+        return any(CACHE_DIR.glob("analysis_*.json"))
+    except Exception:
+        return False
+
+
 def _get_strong_stocks(top_n: int = 5) -> list[dict]:
     """
     Return top N bullish stocks from the most recent cache file.
@@ -439,11 +448,11 @@ def _handle_strong_stocks() -> list[dict]:
     stocks = _get_strong_stocks(top_n=5)
     if not stocks:
         today = datetime.today().strftime("%Y-%m-%d")
-        return [_text_msg(
-            f"今日（{today}）強勢股資料尚未就緒，請稍後再試。\n"
-            "分析通常在每日 14:00 CST 後更新。",
-            HOME_QUICK_REPLY,
-        )]
+        if _has_recent_cache():
+            msg = f"今日（{today}）市場整體偏弱，目前無強勢股。\n可查看轉弱警示或等待市場回溫。"
+        else:
+            msg = f"今日（{today}）分析尚未完成，請稍後再試。\n分析通常在每日 14:00 CST 後更新。"
+        return [_text_msg(msg, HOME_QUICK_REPLY)]
 
     lines = ["🏆 強勢股 Top 5", "─" * 20]
     qr_items = []
@@ -470,11 +479,11 @@ def _handle_weak_stocks() -> list[dict]:
     stocks = _get_weak_stocks(top_n=5)
     if not stocks:
         today = datetime.today().strftime("%Y-%m-%d")
-        return [_text_msg(
-            f"今日（{today}）轉弱股資料尚未就緒，請稍後再試。\n"
-            "分析通常在每日 14:00 CST 後更新。",
-            HOME_QUICK_REPLY,
-        )]
+        if _has_recent_cache():
+            msg = f"今日（{today}）市場整體偏強，目前無轉弱警示。"
+        else:
+            msg = f"今日（{today}）分析尚未完成，請稍後再試。\n分析通常在每日 14:00 CST 後更新。"
+        return [_text_msg(msg, HOME_QUICK_REPLY)]
 
     lines = ["⚠️ 轉弱股 Top 5", "─" * 20]
     qr_items = []
