@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: taiwan-stock-radar-linebot
+    env: python
+    region: singapore   # closest region to Taiwan
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false          # set in Render Dashboard — never committed to source
+      - key: LINE_USER_ID
+        sync: false          # set in Render Dashboard — never committed to source
+      - key: LINE_CHANNEL_SECRET
+        sync: false          # set in Render Dashboard — never committed to source
+      - key: PYTHONIOENCODING
+        value: utf-8
+      - key: TZ
+        value: Asia/Taipei

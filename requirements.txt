@@ -1,0 +1,18 @@
+# Taiwan Stock Radar LINE Bot — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# Scheduling
+apscheduler>=3.10.4
+
+# Data
+yfinance>=0.2.40
+pandas>=2.1.0
+numpy>=1.26.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
