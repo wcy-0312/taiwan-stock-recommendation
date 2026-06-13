@@ -512,8 +512,7 @@ def _handle_news() -> list[dict]:
 
 
 def _handle_watchlist(user_id: str) -> list[dict]:
-    """Handle 我的清單 — show watchlist with radar data when available.
-    V4: uses find_stock_in_latest_cache for data_date label."""
+    """Handle 我的清單 — show watchlist Flex + personalized web link (token-based)."""
     tickers = get_watchlist(user_id)
     if not tickers:
         return [_text_msg(
@@ -529,18 +528,49 @@ def _handle_watchlist(user_id: str) -> list[dict]:
         if r is not None:
             results[ticker] = r
 
+    msgs: list[dict] = []
+
     if results:
         flex = watchlist_flex(tickers, results)
-        flex["quickReply"] = HOME_QUICK_REPLY
-        return [flex]
+        msgs.append(flex)
+    else:
+        lines = ["📋 我的追蹤清單", "─" * 20]
+        for i, t in enumerate(tickers, 1):
+            lines.append(f"  {i}. {t}")
+        lines.append("─" * 20)
+        lines.append(f"共 {len(tickers)} 支")
+        msgs.append(_text_msg("\n".join(lines)))
 
-    # Fallback: plain text list when no cache data available
-    lines = ["📋 我的追蹤清單", "─" * 20]
-    for i, t in enumerate(tickers, 1):
-        lines.append(f"  {i}. {t}")
-    lines.append("─" * 20)
-    lines.append(f"共 {len(tickers)} 支\n輸入「移除 <代號>」可從清單中移除。")
-    return [_text_msg("\n".join(lines), HOME_QUICK_REPLY)]
+    # Append a personalized web link when PUBLIC_BASE_URL is configured
+    from app.config import PUBLIC_BASE_URL
+    if PUBLIC_BASE_URL:
+        from app.tokens import create_token
+        token = create_token(user_id)
+        link = f"{PUBLIC_BASE_URL}/watchlist?token={token}"
+        link_bubble = {
+            "type": "flex",
+            "altText": "開啟追蹤清單完整頁面",
+            "contents": {
+                "type": "bubble", "size": "kilo",
+                "body": {"type": "box", "layout": "vertical", "contents": [
+                    {"type": "text", "text": "📋 完整追蹤清單", "weight": "bold", "size": "md"},
+                    {"type": "text", "text": "在瀏覽器中查看完整雷達資料", "size": "xs",
+                     "color": "#888888", "margin": "sm"},
+                    {"type": "text", "text": "⏰ 連結 30 分鐘內有效", "size": "xs",
+                     "color": "#aaaaaa", "margin": "xs"},
+                ]},
+                "footer": {"type": "box", "layout": "vertical", "contents": [
+                    {"type": "button", "style": "primary", "height": "sm",
+                     "action": {"type": "uri", "label": "開啟追蹤清單", "uri": link}},
+                ]},
+            },
+        }
+        link_bubble["quickReply"] = HOME_QUICK_REPLY
+        msgs.append(link_bubble)
+    else:
+        msgs[-1]["quickReply"] = HOME_QUICK_REPLY
+
+    return msgs
 
 
 def _handle_list_universe() -> list[dict]:

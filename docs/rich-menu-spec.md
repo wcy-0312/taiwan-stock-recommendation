@@ -13,31 +13,29 @@
 | 中上 | 🏆 強勢排行 | **uri** | `{PUBLIC_BASE_URL}/dashboard?tab=strong` | 強勢股排行 |
 | 右上 | ⚠️ 風險警示 | **uri** | `{PUBLIC_BASE_URL}/dashboard?tab=weak` | 轉弱警示 |
 | 左下 | 🔍 查詢個股 | **uri** | `{PUBLIC_BASE_URL}/search` | 搜尋頁（支援輸入代號） |
-| 中下 | 📋 我的追蹤 | **uri** | `{PUBLIC_BASE_URL}/watchlist` | LIFF 頁面，需設定 LIFF_ID |
+| 中下 | 📋 我的追蹤 | **message** | `我的清單` | Bot 產生 token 連結後跳 Web |
 | 右下 | 📰 市場事件 | **uri** | `{PUBLIC_BASE_URL}/dashboard#events` | 市場事件側欄 |
 
-**URI 格數：6 / 6　　Message 格數：0 / 6**
+**URI 格數：5 / 6　　Message 格數：1 / 6**
 
 ---
 
-## 「我的追蹤」— LIFF 整合說明
+## 「我的追蹤」— Token 連結機制
 
-`/watchlist` 使用 LIFF SDK (`liff.getProfile()`) 取得使用者 LINE user_id，再呼叫 `/api/watchlist?user_id={userId}` 取得個人清單。
+LIFF 在 2024 年已不可加入 Messaging API Channel，改用 **Bot 發放 token 連結**的方式：
 
-**必要環境變數：**
-| 變數 | 說明 |
-|------|------|
-| `LIFF_ID` | LINE Developers Console → channel → LIFF 頁取得，格式 `1234567890-xxxxxxxx` |
+**使用者流程：**
+1. 點 Rich Menu「我的追蹤」→ 傳送「我的清單」給 Bot
+2. Bot 查詢清單、產生 30 分鐘有效 token
+3. Bot 回傳 Flex Message（含個股清單）+ 「開啟追蹤清單」按鈕
+4. 點按鈕 → 瀏覽器開啟 `/watchlist?token=xxx` → Web 個人清單頁
 
-**LIFF App 建立步驟：**
-1. LINE Developers Console → 你的 channel → LIFF → 新增 LIFF App
-2. Size: Tall（或 Full）
-3. Endpoint URL: `{PUBLIC_BASE_URL}/watchlist`
-4. Scope: 勾選 `profile`
-5. 複製 LIFF ID → 在 Render 設定 `LIFF_ID=<id>` → 重新部署
-6. 重新執行 `python scripts/setup_rich_menu.py --delete-all`
+**優點：** 不需要 LIFF、LINE Login Channel、或任何帳號連結，token 由 Bot 在 server 端驗證。
 
-**未設定 LIFF_ID 時：** `/watchlist` 頁面顯示設定說明，不崩潰。
+**Token 特性：**
+- 格式：URL-safe 隨機 16 bytes（`secrets.token_urlsafe(16)`）
+- TTL：30 分鐘（過期自動失效）
+- 儲存：process in-memory（Render 重啟後失效，使用者重新輸入「我的清單」即可）
 
 ---
 

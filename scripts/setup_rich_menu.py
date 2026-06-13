@@ -85,10 +85,11 @@ def create_rich_menu(base_url: str) -> str:
                 "bounds": {"x": 0, "y": 843, "width": 833, "height": 843},
                 "action": {"type": "uri", "uri": f"{b}/search"},
             },
-            # 我的追蹤 — URI: /watchlist (LIFF page; requires LIFF_ID env on Render)
+            # 我的追蹤 — message: Bot generates personalized token link
+            # Web view requires a short-lived token that only the Bot can issue.
             {
                 "bounds": {"x": 833, "y": 843, "width": 833, "height": 843},
-                "action": {"type": "uri", "uri": f"{b}/watchlist"},
+                "action": {"type": "message", "text": "我的清單"},
             },
             # 市場事件 — URI: /dashboard#events
             {

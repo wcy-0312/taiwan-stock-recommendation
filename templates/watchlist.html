@@ -2,19 +2,15 @@
 {% block title %}我的追蹤 — 台股智能雷達{% endblock %}
 
 {% block head %}
-<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
 .wl-state { text-align: center; padding: 48px 16px; color: #a0aec0; }
 .wl-state .icon { font-size: 48px; margin-bottom: 16px; }
 .wl-state h2 { color: #e2e8f0; margin-bottom: 8px; }
-.spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid #4a5568;
-  border-top-color: #63b3ed; border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.user-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px 16px;
-  background: #1a1d2e; border-radius: 8px; border: 1px solid #2d3748; }
-.user-bar img { width: 36px; height: 36px; border-radius: 50%; }
-.user-bar .name { color: #e2e8f0; font-weight: bold; }
-.user-bar .sub { color: #718096; font-size: 13px; }
+.step-box { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 8px;
+  padding: 20px 24px; margin: 20px auto; max-width: 480px; text-align: left; }
+.step-box ol { padding-left: 20px; line-height: 2; color: #e2e8f0; }
+.step-box code { background: #2d3748; padding: 2px 8px; border-radius: 4px;
+  color: #90cdf4; font-family: monospace; }
 .stock-card { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 8px;
   padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px;
   text-decoration: none; color: inherit; transition: border-color .15s; }
@@ -22,144 +18,99 @@
 .stock-code { font-size: 18px; font-weight: bold; color: #90cdf4; min-width: 52px; }
 .stock-name { color: #e2e8f0; font-size: 15px; }
 .stock-meta { color: #718096; font-size: 13px; margin-top: 2px; }
-.stock-score { margin-left: auto; text-align: right; }
+.stock-score { margin-left: auto; text-align: right; flex-shrink: 0; }
 .score-num { font-size: 22px; font-weight: bold; }
 .score-bull { color: #68d391; }
 .score-bear { color: #fc8181; }
 .score-neutral { color: #a0aec0; }
 .no-data-chip { color: #718096; font-style: italic; font-size: 13px; }
-.setup-box { background: #1a1d2e; border: 1px solid #4a5568; border-radius: 8px;
-  padding: 20px; margin-top: 16px; font-size: 14px; line-height: 1.8; }
-.setup-box code { background: #2d3748; padding: 2px 6px; border-radius: 4px;
-  font-family: monospace; color: #90cdf4; }
+.summary-bar { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.summary-chip { background: #2d3748; border-radius: 20px; padding: 6px 14px;
+  font-size: 13px; color: #a0aec0; }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1 style="margin-bottom: 20px;">📋 我的追蹤</h1>
 
-<div id="state-loading" class="wl-state">
-  <div><div class="spinner"></div></div>
-  <p style="margin-top: 16px;">登入中...</p>
-</div>
-
-<div id="state-no-liff" class="wl-state" style="display:none;">
-  <div class="icon">⚙️</div>
-  <h2>LIFF 尚未設定</h2>
-  <p>管理員需在 Render 設定 <code>LIFF_ID</code> 環境變數。</p>
-  <div class="setup-box" style="text-align:left;">
-    <strong>設定步驟：</strong><br>
-    1. LINE Developers Console → 你的 channel → LIFF → 新增<br>
-    2. Endpoint URL：<code>{{ request.url.scheme }}://{{ request.url.netloc }}/watchlist</code><br>
-    3. Scope：勾選 <code>profile</code><br>
-    4. 取得 LIFF ID（格式：<code>1234567890-xxxxxxxx</code>）<br>
-    5. 在 Render 設定 <code>LIFF_ID=&lt;your-liff-id&gt;</code> 並重新部署
+{% if state == "no_token" %}
+<div class="wl-state">
+  <div class="icon">🔗</div>
+  <h2>需要個人連結</h2>
+  <p>此頁面透過 LINE Bot 產生的專屬連結開啟。</p>
+  <div class="step-box">
+    <ol>
+      <li>開啟 LINE，找到 <strong>台股智能雷達</strong> Bot</li>
+      <li>傳送 <code>我的清單</code></li>
+      <li>Bot 會回傳「開啟追蹤清單」按鈕</li>
+      <li>點按鈕即可查看（連結 30 分鐘有效）</li>
+    </ol>
   </div>
 </div>
 
-<div id="state-error" class="wl-state" style="display:none;">
-  <div class="icon">⚠️</div>
-  <h2>載入失敗</h2>
-  <p id="error-msg"></p>
-  <p style="margin-top:8px;font-size:13px;">請在 LINE App 內開啟此頁面，或重新整理再試。</p>
+{% elif state == "expired" %}
+<div class="wl-state">
+  <div class="icon">⏰</div>
+  <h2>連結已過期</h2>
+  <p>連結的有效期限為 30 分鐘。</p>
+  <div class="step-box">
+    <ol>
+      <li>回到 LINE Bot</li>
+      <li>傳送 <code>我的清單</code></li>
+      <li>重新取得新的連結</li>
+    </ol>
+  </div>
 </div>
 
-<div id="state-main" style="display:none;">
-  <div class="user-bar">
-    <img id="user-pic" src="" alt="" onerror="this.style.display='none'">
-    <div>
-      <div class="name" id="user-name"></div>
-      <div class="sub" id="user-sub"></div>
-    </div>
-  </div>
-  <div id="stock-list"></div>
-  <div id="state-empty" class="wl-state" style="display:none;">
+{% elif state == "ok" %}
+  {% if not stocks %}
+  <div class="wl-state">
     <div class="icon">📭</div>
     <h2>追蹤清單是空的</h2>
-    <p>在 LINE 對話中輸入「追蹤 2330」加入股票。</p>
+    <p>在 LINE Bot 輸入「追蹤 2330」加入股票。</p>
   </div>
-</div>
-
-<script>
-const LIFF_ID = {{ liff_id | tojson }};
-
-function show(id) {
-  ['state-loading','state-no-liff','state-error','state-main']
-    .forEach(s => document.getElementById(s).style.display = s === id ? '' : 'none');
-}
-
-function dirClass(d) {
-  return d === 'bullish' ? 'score-bull' : d === 'bearish' ? 'score-bear' : 'score-neutral';
-}
-function dirLabel(d) {
-  return d === 'bullish' ? '強勢' : d === 'bearish' ? '轉弱' : '中性';
-}
-function changeColor(v) {
-  return v > 0 ? '#68d391' : v < 0 ? '#fc8181' : '#a0aec0';
-}
-
-function renderStocks(stocks, dataDate) {
-  const list = document.getElementById('stock-list');
-  if (!stocks.length) {
-    document.getElementById('state-empty').style.display = '';
-    return;
-  }
-  list.innerHTML = stocks.map(s => {
-    if (!s.has_data) return `
-      <div class="stock-card">
-        <div><div class="stock-code">${s.code}</div>
-        <div class="no-data-chip">尚無雷達資料</div></div>
-      </div>`;
-    const chg = s.price_change_1d_pct;
-    const chgStr = chg > 0 ? `+${chg.toFixed(2)}%` : `${chg.toFixed(2)}%`;
-    return `
-      <a class="stock-card" href="/stock/${s.code}">
-        <div>
-          <div class="stock-code">${s.code}</div>
-          <div class="stock-name">${s.name || ''}</div>
-          <div class="stock-meta">
-            NT$${s.latest_close ? s.latest_close.toFixed(1) : '—'}
-            <span style="color:${changeColor(chg)}">${chgStr}</span>
-            · ${s.confidence}信心 · ${s.data_date || dataDate}
-          </div>
+  {% else %}
+  <div class="summary-bar">
+    <span class="summary-chip">共 {{ count }} 支</span>
+    <span class="summary-chip">資料日期 {{ data_date }}</span>
+  </div>
+  {% for s in stocks %}
+    {% if s.has_data %}
+    <a class="stock-card" href="/stock/{{ s.code }}">
+      <div>
+        <div class="stock-code">{{ s.code }}</div>
+        <div class="stock-name">{{ s.name or '' }}</div>
+        <div class="stock-meta">
+          NT${{ '%.1f' % s.latest_close if s.latest_close else '—' }}
+          {% set chg = s.price_change_1d_pct %}
+          <span style="color: {{ '#68d391' if chg > 0 else '#fc8181' if chg < 0 else '#a0aec0' }}">
+            {{ '+%.2f%%' % chg if chg > 0 else '%.2f%%' % chg }}
+          </span>
+          · {{ s.confidence }}信心 · {{ s.data_date }}
         </div>
-        <div class="stock-score">
-          <div class="score-num ${dirClass(s.direction)}">${Math.round(s.radar_score)}</div>
-          <div style="font-size:12px;color:#718096;">${dirLabel(s.direction)}</div>
+      </div>
+      <div class="stock-score">
+        <div class="score-num {{ 'score-bull' if s.direction == 'bullish' else 'score-bear' if s.direction == 'bearish' else 'score-neutral' }}">
+          {{ s.radar_score | round | int }}
         </div>
-      </a>`;
-  }).join('');
-}
+        <div style="font-size:12px;color:#718096;">
+          {{ '強勢' if s.direction == 'bullish' else '轉弱' if s.direction == 'bearish' else '中性' }}
+        </div>
+      </div>
+    </a>
+    {% else %}
+    <div class="stock-card">
+      <div>
+        <div class="stock-code">{{ s.code }}</div>
+        <div class="no-data-chip">尚無雷達資料</div>
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+  <p style="color:#718096;font-size:13px;margin-top:16px;text-align:center;">
+    以上僅為量化技術觀察，不構成投資建議。
+  </p>
+  {% endif %}
+{% endif %}
 
-async function init() {
-  if (!LIFF_ID) { show('state-no-liff'); return; }
-
-  try {
-    await liff.init({ liffId: LIFF_ID });
-
-    if (!liff.isLoggedIn()) {
-      liff.login({ redirectUri: window.location.href });
-      return;
-    }
-
-    const profile = await liff.getProfile();
-    document.getElementById('user-pic').src = profile.pictureUrl || '';
-    document.getElementById('user-name').textContent = profile.displayName;
-
-    const resp = await fetch('/api/watchlist?user_id=' + encodeURIComponent(profile.userId));
-    const data = await resp.json();
-
-    document.getElementById('user-sub').textContent =
-      `追蹤 ${data.count} 支 · 資料日期 ${data.data_date}`;
-
-    show('state-main');
-    renderStocks(data.stocks || [], data.data_date);
-  } catch (e) {
-    document.getElementById('error-msg').textContent = e.message || String(e);
-    show('state-error');
-  }
-}
-
-init();
-</script>
 {% endblock %}

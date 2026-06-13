@@ -89,12 +89,63 @@ async def dashboard(request: Request):
 
 
 @router.get("/watchlist", response_class=HTMLResponse)
-async def watchlist_page(request: Request):
-    """LIFF-powered watchlist page — entry point from Rich Menu 我的追蹤 URI action."""
-    from app.config import LIFF_ID
+async def watchlist_page(request: Request, token: str = ""):
+    """Token-based watchlist page.
+
+    Flow: LINE Bot generates a short-lived token (app.tokens.create_token),
+    sends it in a Flex Message link.  This route validates the token and
+    renders the user's watchlist without requiring LIFF or LINE Login.
+
+    No token → show instructions.
+    Invalid/expired token → show expiry message.
+    Valid token → show watchlist with radar data.
+    """
+    from app.tokens import validate_token
+    from app.linebot.watchlist import get_watchlist
+
+    if not token:
+        return templates.TemplateResponse(
+            request=request, name="watchlist.html",
+            context={"state": "no_token"},
+        )
+
+    user_id = validate_token(token)
+    if not user_id:
+        return templates.TemplateResponse(
+            request=request, name="watchlist.html",
+            context={"state": "expired"},
+        )
+
+    tickers = get_watchlist(user_id)
+    data_date = get_latest_analysis_date()
+    stocks = []
+    for ticker in tickers:
+        normalized = ticker if ticker.endswith(".TW") else ticker + ".TW"
+        result = find_stock_in_latest_cache(normalized)
+        code = ticker.replace(".TW", "")
+        if result:
+            stocks.append({
+                "code": code,
+                "name": result.get("name", ""),
+                "radar_score": result.get("radar_score", 0),
+                "direction": result.get("direction", "neutral"),
+                "confidence": result.get("confidence", "低"),
+                "latest_close": result.get("latest_close", 0),
+                "price_change_1d_pct": result.get("price_change_1d_pct", 0),
+                "data_date": result.get("data_date", data_date),
+                "has_data": True,
+            })
+        else:
+            stocks.append({"code": code, "has_data": False})
+
     return templates.TemplateResponse(
         request=request, name="watchlist.html",
-        context={"liff_id": LIFF_ID},
+        context={
+            "state": "ok",
+            "stocks": stocks,
+            "data_date": data_date,
+            "count": len(stocks),
+        },
     )
 
 
@@ -161,43 +212,6 @@ async def stock_page(request: Request, code: str):
 
 
 # ── JSON API routes ───────────────────────────────────────────────────────────
-
-@router.get("/api/watchlist")
-async def api_watchlist(user_id: str = ""):
-    """Return a user's watchlist enriched with latest radar data.
-
-    Called by /watchlist LIFF page after liff.getProfile() resolves.
-    user_id comes from liff.getProfile().userId — channel-specific, not sensitive.
-    """
-    if not user_id:
-        return JSONResponse({"error": "user_id is required"}, status_code=400)
-
-    from app.linebot.watchlist import get_watchlist
-    tickers = get_watchlist(user_id)
-
-    data_date = get_latest_analysis_date()
-    stocks = []
-    for ticker in tickers:
-        normalized = ticker if ticker.endswith(".TW") else ticker + ".TW"
-        result = find_stock_in_latest_cache(normalized)
-        code = ticker.replace(".TW", "")
-        if result:
-            stocks.append({
-                "ticker": normalized,
-                "code": code,
-                "name": result.get("name", ""),
-                "radar_score": result.get("radar_score", 0),
-                "direction": result.get("direction", "neutral"),
-                "confidence": result.get("confidence", "低"),
-                "latest_close": result.get("latest_close", 0),
-                "price_change_1d_pct": result.get("price_change_1d_pct", 0),
-                "data_date": result.get("data_date", data_date),
-                "has_data": True,
-            })
-        else:
-            stocks.append({"ticker": normalized, "code": code, "has_data": False})
-
-    return JSONResponse({"data_date": data_date, "count": len(stocks), "stocks": stocks})
 
 
 @router.get("/api/radar/latest")
