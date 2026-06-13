@@ -57,8 +57,23 @@ LINE Official Account Manager → 設定 → 回應設定
 - [ ] Webhook URL 已設為 `https://<your-app>.onrender.com/webhook`
 - [ ] Use webhook 已開啟
 - [ ] Webhook redelivery 已開啟（建議，避免冷啟動時漏失訊息）
-- [ ] Render 環境變數已設定（LINE_CHANNEL_ACCESS_TOKEN、LINE_USER_ID、LINE_CHANNEL_SECRET）
-- [ ] `GET /health` 回傳 `{"status":"ok"}`
+- [ ] Render 環境變數已設定（LINE_CHANNEL_ACCESS_TOKEN、LINE_USER_ID、LINE_CHANNEL_SECRET、PUBLIC_BASE_URL）
+- [ ] `GET /health` 回傳 `{"status":"ok","public_base_url_configured":true}`
+- [ ] Rich Menu 已上傳（`python scripts/setup_rich_menu.py`）
+
+---
+
+## Rich Menu 維護
+
+```bash
+# 重新生成圖片（需 Pillow + CJK 字型，本機執行）
+python scripts/generate_rich_menu_image.py
+
+# 刪除舊 Rich Menu 並重新上傳（需 .env 含 PUBLIC_BASE_URL）
+python scripts/setup_rich_menu.py --delete-all
+```
+
+**注意：** `PUBLIC_BASE_URL` 未設定時 `setup_rich_menu.py` 會直接報錯退出，不建立任何 Rich Menu。
 
 ---
 

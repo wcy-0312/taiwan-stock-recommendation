@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}查詢個股 — 台股智能雷達{% endblock %}
+
+{% block head %}
+<style>
+.search-box { display: flex; gap: 8px; margin-bottom: 24px; }
+.search-box input {
+  flex: 1; padding: 12px 16px; border-radius: 8px;
+  border: 1px solid #4a5568; background: #2d3748; color: #e2e8f0;
+  font-size: 18px; outline: none;
+}
+.search-box input:focus { border-color: #63b3ed; }
+.search-box button {
+  padding: 12px 24px; border-radius: 8px; border: none;
+  background: #2b6cb0; color: white; font-size: 16px; cursor: pointer;
+}
+.search-box button:hover { background: #2c5282; }
+.hot-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.hot-chip {
+  display: inline-block; padding: 8px 16px; border-radius: 20px;
+  background: #2d3748; border: 1px solid #4a5568;
+  color: #90cdf4; text-decoration: none; font-size: 14px;
+}
+.hot-chip:hover { background: #4a5568; }
+.stock-link { color: #90cdf4; text-decoration: none; }
+.stock-link:hover { text-decoration: underline; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+.hint { color: #718096; font-size: 13px; margin-top: 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 20px;">🔍 查詢個股</h1>
+
+<!-- Search form -->
+<form class="search-box" onsubmit="goSearch(event)">
+  <input id="q" type="text" placeholder="輸入股票代號，例如 2330" autocomplete="off"
+         inputmode="numeric" pattern="[0-9]*" maxlength="10" />
+  <button type="submit">查詢</button>
+</form>
+<p class="hint">輸入 4 位數台股代號後按查詢，直接進入個股雷達頁面。</p>
+
+<!-- Hot stocks -->
+<div class="card" style="margin-top: 24px;">
+  <h3>🔥 熱門股票</h3>
+  <div class="hot-grid" style="margin-top: 12px;">
+    {% for s in hot_stocks %}
+    <a class="hot-chip" href="/stock/{{ s.code }}">{{ s.code }} {{ s.name }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Strong / Weak top 5 -->
+<div class="two-col" style="margin-top: 16px;">
+  <div class="card">
+    <h3>🏆 強勢 Top 5</h3>
+    {% if strong_top5 %}
+    <table style="margin-top: 12px;">
+      <thead><tr><th>代號</th><th>名稱</th><th>雷達分</th></tr></thead>
+      <tbody>
+      {% for r in strong_top5 %}
+      <tr>
+        <td><a class="stock-link" href="/stock/{{ r.code or r.ticker|replace('.TW','') }}">
+          {{ r.code or r.ticker|replace('.TW','') }}</a></td>
+        <td>{{ r.name or '—' }}</td>
+        <td>{{ r.radar_score|round(1) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint" style="margin-top: 12px;">目前無資料</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>⚠️ 轉弱 Top 5</h3>
+    {% if weak_top5 %}
+    <table style="margin-top: 12px;">
+      <thead><tr><th>代號</th><th>名稱</th><th>雷達分</th></tr></thead>
+      <tbody>
+      {% for r in weak_top5 %}
+      <tr>
+        <td><a class="stock-link" href="/stock/{{ r.code or r.ticker|replace('.TW','') }}">
+          {{ r.code or r.ticker|replace('.TW','') }}</a></td>
+        <td>{{ r.name or '—' }}</td>
+        <td>{{ r.radar_score|round(1) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint" style="margin-top: 12px;">目前無資料</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if total %}
+<p class="hint" style="margin-top: 16px; text-align: center;">
+  資料日期：{{ data_date }} — 共 {{ total }} 支股票已分析
+</p>
+{% endif %}
+
+<script>
+function goSearch(e) {
+  e.preventDefault();
+  const code = document.getElementById('q').value.trim().replace(/\D/g, '');
+  if (!code) return;
+  window.location = '/stock/' + code;
+}
+// Auto-focus on desktop
+document.getElementById('q').focus();
+</script>
+{% endblock %}

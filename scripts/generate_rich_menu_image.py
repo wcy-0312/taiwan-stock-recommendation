@@ -2,8 +2,8 @@
 scripts/generate_rich_menu_image.py — Generate Rich Menu image using Pillow.
 
 Produces a 2500×1686 PNG with 6 cells (2 rows × 3 cols):
-    Row 1: 今日雷達 | 強勢股 | 轉弱股
-    Row 2: 查個股   | 我的清單 | 市場新聞
+    Row 1: 今日雷達 | 強勢排行 | 風險警示
+    Row 2: 查詢個股  | 我的追蹤 | 市場事件
 
 Font search order:
     1. RICH_MENU_FONT_PATH env var
@@ -35,13 +35,13 @@ CELL_W = IMG_W // COLS     # 833
 CELL_H = IMG_H // ROWS     # 843
 
 CELLS = [
-    # (row, col, emoji, label, command)
-    (0, 0, "📊", "今日雷達", "今日雷達"),
-    (0, 1, "🏆", "強勢股",   "強勢股"),
-    (0, 2, "⚠️", "轉弱股",   "轉弱股"),
-    (1, 0, "🔍", "查個股",   "查 2330"),
-    (1, 1, "📋", "我的清單", "我的清單"),
-    (1, 2, "📰", "市場新聞", "新聞"),
+    # (row, col, emoji, label, hint)   hint = action-type label shown in image
+    (0, 0, "📊", "今日雷達", "Web ↗"),
+    (0, 1, "🏆", "強勢排行", "Web ↗"),
+    (0, 2, "⚠️", "風險警示", "Web ↗"),
+    (1, 0, "🔍", "查詢個股", "Web ↗"),
+    (1, 1, "📋", "我的追蹤", "訊息"),
+    (1, 2, "📰", "市場事件", "Web ↗"),
 ]
 
 # Background & text colours

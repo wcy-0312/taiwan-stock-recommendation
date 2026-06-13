@@ -87,6 +87,39 @@ async def dashboard(request: Request):
     )
 
 
+@router.get("/search", response_class=HTMLResponse)
+async def search_page(request: Request):
+    """Stock search page — entry point from Rich Menu 查詢個股 URI action."""
+    from app.cache.latest_cache import list_latest_results
+
+    results = list_latest_results()
+    strong = sorted(
+        [r for r in results if r.get("direction") == "bullish"],
+        key=lambda r: r.get("radar_score", 0), reverse=True,
+    )[:5]
+    weak = sorted(
+        [r for r in results if r.get("direction") == "bearish"],
+        key=lambda r: r.get("radar_score", 0),
+    )[:5]
+    hot_stocks = [
+        {"code": "2330", "name": "台積電"},
+        {"code": "2317", "name": "鴻海"},
+        {"code": "2454", "name": "聯發科"},
+        {"code": "2412", "name": "中華電"},
+        {"code": "2891", "name": "中信金"},
+    ]
+    return templates.TemplateResponse(
+        request=request, name="search.html",
+        context={
+            "hot_stocks": hot_stocks,
+            "strong_top5": strong,
+            "weak_top5": weak,
+            "data_date": get_latest_analysis_date(),
+            "total": len(results),
+        },
+    )
+
+
 @router.get("/stock/{code}", response_class=HTMLResponse)
 async def stock_page(request: Request, code: str):
     code = code.upper().replace("-", ".")
