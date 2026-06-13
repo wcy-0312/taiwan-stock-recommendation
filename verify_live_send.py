@@ -31,21 +31,12 @@ import os
 import sys
 from pathlib import Path
 
-# ── Path setup — locate project root and modules ───────────────────────────────
+# ── Path setup — all modules are co-located in the same directory ──────────────
 _THIS_DIR = Path(__file__).parent.resolve()
-_PROJECT_ROOT = _THIS_DIR.parent.parent.parent  # artifacts/ → project root
-_ARTIFACTS_ROOT = _PROJECT_ROOT / "artifacts"
+_PROJECT_ROOT = _THIS_DIR  # flat repo: verify_live_send.py is at project root
 
-# Add all artifact paths
-_ART001 = str(_ARTIFACTS_ROOT / "checkpoint-1" / "ART-001")
-_ART002 = str(_ARTIFACTS_ROOT / "checkpoint-1" / "ART-002")
-_ART003 = str(_ARTIFACTS_ROOT / "checkpoint-2" / "ART-003")
-_ART004 = str(_ARTIFACTS_ROOT / "checkpoint-2" / "ART-004")
-_ART005 = str(_ARTIFACTS_ROOT / "checkpoint-3" / "ART-005")
-
-for _p in [_ART001, _ART002, _ART003, _ART004, _ART005]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
 
 # ── Environment setup ──────────────────────────────────────────────────────────
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
