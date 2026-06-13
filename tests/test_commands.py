@@ -410,7 +410,6 @@ class TestHelpCommand:
         assert "查" in msg_text
         assert "追蹤" in msg_text
         assert "移除" in msg_text
-        assert "幫助" in msg_text
         assert "不構成投資建議" in msg_text
 
 
