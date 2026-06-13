@@ -69,3 +69,7 @@ WEAKNESS_ALERTS_BROADCAST_TOP: int = 2
 # ── LINE message limits ───────────────────────────────────────────────────────
 LINE_MESSAGE_MAX_CHARS: int = 5000
 LINE_MESSAGE_MAX_PARTS: int = 3
+
+# ── Web Dashboard ─────────────────────────────────────────────────────────────
+PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+# Set to your Render URL, e.g. https://taiwan-stock-radar-linebot.onrender.com

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}今日雷達 — 台股智能雷達{% endblock %}
+{% block head %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js" defer></script>
+{% endblock %}
+{% block content %}
+<h1>📊 今日雷達</h1>
+<p style="color:#718096; margin-bottom:24px;">資料日期：{{ data_date }}</p>
+
+{% if no_data %}
+<div class="empty-state">
+  <p style="font-size:1.2rem; margin-bottom:8px;">今日資料尚未更新</p>
+  <p>分析通常在每日 14:00 CST 後完成。</p>
+</div>
+{% else %}
+
+<div class="card" style="margin-bottom:16px;">
+  <h3>市場概況</h3>
+  <p>偏多股票：{{ market_stats.get('bullish_count', 0) }} / {{ total }} 支 ｜
+     市場分數：{{ market_stats.get('market_score', 5) }}/10</p>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+<div>
+<div class="card">
+  <h3>🏆 強勢觀察</h3>
+  {% if strong %}
+  <table>
+    <tr><th>#</th><th>代號</th><th>名稱</th><th>雷達分</th><th>信心</th><th></th></tr>
+    {% for r in strong %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td><strong>{{ r.code }}</strong></td>
+      <td>{{ r.name }}</td>
+      <td>
+        <span class="score-bar"><span class="score-bar-fill" style="width:{{ r.radar_score }}%; background:#68d391;"></span></span>
+        {{ r.radar_score }}
+      </td>
+      <td><span class="badge badge-bull">{{ r.confidence }}</span></td>
+      <td><a href="/stock/{{ r.code }}" class="btn">詳細</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="empty-state">今日無強勢股</p>{% endif %}
+</div>
+</div>
+
+<div>
+<div class="card">
+  <h3>⚠️ 轉弱警示</h3>
+  {% if weak %}
+  <table>
+    <tr><th>#</th><th>代號</th><th>名稱</th><th>雷達分</th><th></th></tr>
+    {% for r in weak %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td><strong>{{ r.code }}</strong></td>
+      <td>{{ r.name }}</td>
+      <td>
+        <span class="score-bar"><span class="score-bar-fill" style="width:{{ r.radar_score }}%; background:#fc8181;"></span></span>
+        {{ r.radar_score }}
+      </td>
+      <td><a href="/stock/{{ r.code }}" class="btn">詳細</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p style="color:#718096; padding:16px;">今日無轉弱警示</p>{% endif %}
+</div>
+</div>
+</div>
+
+{% endif %}
+<p style="color:#4a5568; text-align:center; margin-top:32px; font-size:12px;">以上僅為量化技術觀察，不構成投資建議。</p>
+{% endblock %}

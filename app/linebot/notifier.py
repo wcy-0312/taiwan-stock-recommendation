@@ -13,7 +13,7 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from typing import Optional
+from typing import Optional, Union
 
 import os
 
@@ -38,6 +38,33 @@ def _make_text_message(text: str) -> dict:
     return {"type": "text", "text": text}
 
 
+def _make_message(msg: Union[str, dict]) -> dict:
+    """
+    Normalise a message to a LINE message object.
+
+    Parameters
+    ----------
+    msg : str  — converted to {"type": "text", "text": msg}
+          dict — returned as-is if it already contains a "type" key;
+                 otherwise raises ValueError
+
+    Returns
+    -------
+    dict — a valid LINE message object
+    """
+    if isinstance(msg, str):
+        return {"type": "text", "text": msg}
+    if isinstance(msg, dict):
+        if "type" not in msg:
+            raise ValueError(
+                "_make_message: dict message is missing the required 'type' field"
+            )
+        return msg
+    raise TypeError(
+        f"_make_message: expected str or dict, got {type(msg).__name__}"
+    )
+
+
 def _build_headers() -> dict:
     return {
         "Content-Type": "application/json; charset=UTF-8",
@@ -45,14 +72,20 @@ def _build_headers() -> dict:
     }
 
 
-def push_messages(messages: list[str], user_id: Optional[str] = None) -> dict:
+def push_messages(
+    messages: list[Union[str, dict]],
+    user_id: Optional[str] = None,
+) -> dict:
     """
-    Push one or more text messages to a LINE user.
+    Push one or more messages to a LINE user.
 
     Parameters
     ----------
-    messages : list[str] — list of message strings (max 5 per LINE API call)
-    user_id  : str       — LINE user ID to push to; defaults to LINE_USER_ID from config
+    messages : list[str | dict]
+        Message strings or pre-built LINE message objects (flex, quickReply, etc.).
+        Maximum 5 per LINE API call; larger lists are sent in batches.
+    user_id  : str
+        LINE user ID to push to; defaults to LINE_USER_ID from config.
 
     Returns
     -------
@@ -86,11 +119,11 @@ def push_messages(messages: list[str], user_id: Optional[str] = None) -> dict:
     return results[-1] if results else {"success": True, "status_code": 200, "error": None}
 
 
-def _push_batch(user_id: str, messages: list[str]) -> dict:
-    """Push a single batch of up to 5 messages."""
+def _push_batch(user_id: str, messages: list[Union[str, dict]]) -> dict:
+    """Push a single batch of up to 5 messages (str or LINE message objects)."""
     payload = {
         "to": user_id,
-        "messages": [_make_text_message(m) for m in messages],
+        "messages": [_make_message(m) for m in messages],
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
@@ -117,14 +150,17 @@ def _push_batch(user_id: str, messages: list[str]) -> dict:
         return {"success": False, "status_code": 0, "error": str(exc)}
 
 
-def reply_messages(reply_token: str, messages: list[str]) -> dict:
+def reply_messages(reply_token: str, messages: list[Union[str, dict]]) -> dict:
     """
     Reply to a LINE webhook event using a reply token.
 
     Parameters
     ----------
-    reply_token : str      — token from the webhook event (valid for ~30 s)
-    messages    : list[str] — up to 5 reply message strings
+    reply_token : str
+        Token from the webhook event (valid for ~30 s).
+    messages    : list[str | dict]
+        Up to 5 reply messages.  Each item may be a plain string or a
+        pre-built LINE message object (flex, quickReply, etc.).
 
     Returns
     -------
@@ -141,7 +177,7 @@ def reply_messages(reply_token: str, messages: list[str]) -> dict:
     batch = messages[:_LINE_API_MAX_MESSAGES]
     payload = {
         "replyToken": reply_token,
-        "messages": [_make_text_message(m) for m in batch],
+        "messages": [_make_message(m) for m in batch],
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
@@ -168,7 +204,45 @@ def reply_messages(reply_token: str, messages: list[str]) -> dict:
         return {"success": False, "status_code": 0, "error": str(exc)}
 
 
-def send_broadcast(messages: list[str]) -> dict:
+def reply_message_objects(reply_token: str, message_objects: list[dict]) -> dict:
+    """
+    Reply with pre-built LINE message objects (flex, text with quickReply, etc.).
+
+    Parameters
+    ----------
+    reply_token     : str        — token from the webhook event (valid for ~30 s)
+    message_objects : list[dict] — up to 5 LINE message objects, each with a "type" field
+
+    Returns
+    -------
+    dict with keys: success, status_code, error
+    """
+    return reply_messages(reply_token, message_objects)
+
+
+def push_message_objects(
+    message_objects: list[dict],
+    user_id: Optional[str] = None,
+) -> dict:
+    """
+    Push pre-built LINE message objects to a user.
+
+    Parameters
+    ----------
+    message_objects : list[dict]
+        LINE message objects (flex, text with quickReply, etc.), each with a "type" field.
+        Larger lists are batched automatically (5 per API call).
+    user_id         : str
+        LINE user ID to push to; defaults to LINE_USER_ID from config.
+
+    Returns
+    -------
+    dict with keys: success, status_code, error
+    """
+    return push_messages(message_objects, user_id=user_id)
+
+
+def send_broadcast(messages: list[Union[str, dict]]) -> dict:
     """
     Convenience wrapper: push messages to the default LINE_USER_ID.
     Used by the daily scheduler job.

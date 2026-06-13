@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}台股智能雷達{% endblock %}
+{% block content %}
+<div style="text-align:center; padding: 80px 16px;">
+  <h1 style="font-size:2.5rem; margin-bottom:16px;">📊 台股智能雷達</h1>
+  <p style="color:#a0aec0; font-size:1.1rem; margin-bottom:32px;">量化技術觀察 · 非投資建議</p>
+  <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+    <a href="/dashboard" class="btn" style="font-size:16px; padding:12px 28px;">今日雷達看板</a>
+    <a href="/api/radar/latest" class="btn" style="font-size:16px; padding:12px 28px; background:#276749;">API JSON</a>
+  </div>
+  <div class="card" style="max-width:500px; margin:48px auto 0; text-align:left;">
+    <h3>功能</h3>
+    <ul style="color:#a0aec0; margin-top:12px; padding-left:20px;">
+      <li>0050 成分股每日技術雷達評分（0–100）</li>
+      <li>強勢觀察 / 轉弱警示 / 翻多翻空訊號</li>
+      <li>LINE Bot 互動查詢與追蹤清單</li>
+      <li>個股技術指標詳細頁</li>
+      <li>回測統計</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — 台股智能雷達{% endblock %}
+{% block head %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% endblock %}
+{% block content %}
+{% if no_data %}
+<h1>{{ code }}</h1>
+<div class="empty-state">
+  <p style="font-size:1.1rem; margin-bottom:8px;">找不到 {{ code }} 的雷達資料</p>
+  <p>可能尚未更新，或此股票不在目前支援範圍內。</p>
+  <p style="margin-top:16px;"><a href="/dashboard" class="btn">回到今日雷達</a></p>
+</div>
+{% else %}
+{% set r = result %}
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+  <h1>{{ r.code }} {{ r.name }}</h1>
+  {% if r.direction == 'bullish' %}
+  <span class="badge badge-bull">🟢 偏多</span>
+  {% elif r.direction == 'bearish' %}
+  <span class="badge badge-bear">🔴 偏空</span>
+  {% else %}
+  <span class="badge badge-neutral">⚪ 觀望</span>
+  {% endif %}
+  <span class="badge" style="background:#2d3748;">信心：{{ r.confidence }}</span>
+</div>
+<p style="color:#718096; margin-bottom:24px;">資料日期：{{ data_date }}</p>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+<div class="card">
+  <h3>雷達分數</h3>
+  <p style="font-size:3rem; font-weight:bold; color:#63b3ed;">{{ r.radar_score }}</p>
+  <p style="color:#718096; font-size:13px;">
+    趨勢{{ r.trend_score }} ｜ 動能{{ r.momentum_score }} ｜
+    量能{{ r.volume_score }} ｜ 風險{{ r.risk_score }} ｜ 市場{{ r.market_score }}
+  </p>
+</div>
+<div class="card">
+  <h3>價格</h3>
+  <p style="font-size:2rem; font-weight:bold;">{{ "%.2f"|format(r.latest_close) }}</p>
+  <p style="color:{% if r.price_change_1d_pct >= 0 %}#68d391{% else %}#fc8181{% endif %};">
+    日漲跌：{% if r.price_change_1d_pct >= 0 %}+{% endif %}{{ "%.1f"|format(r.price_change_1d_pct) }}%
+  </p>
+  <p style="color:{% if r.price_change_5d_pct >= 0 %}#68d391{% else %}#fc8181{% endif %}; font-size:13px;">
+    5日：{% if r.price_change_5d_pct >= 0 %}+{% endif %}{{ "%.1f"|format(r.price_change_5d_pct) }}%
+  </p>
+</div>
+</div>
+
+<div id="sub-score-chart" class="card" style="height:200px;"></div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+<div class="card">
+  <h3>✅ 正面訊號</h3>
+  {% if r.positive_reasons %}
+  <ul style="padding-left:20px; color:#a0aec0;">
+  {% for reason in r.positive_reasons %}<li>{{ reason }}</li>{% endfor %}
+  </ul>
+  {% else %}<p style="color:#718096;">—</p>{% endif %}
+</div>
+<div class="card">
+  <h3>🔻 負面訊號</h3>
+  {% if r.negative_reasons %}
+  <ul style="padding-left:20px; color:#a0aec0;">
+  {% for reason in r.negative_reasons %}<li>{{ reason }}</li>{% endfor %}
+  </ul>
+  {% else %}<p style="color:#718096;">—</p>{% endif %}
+</div>
+</div>
+
+{% if r.risk_notes %}
+<div class="card" style="border-color:#c05621;">
+  <h3>⚠️ 風險提醒</h3>
+  <ul style="padding-left:20px; color:#fbb6ce;">
+  {% for note in r.risk_notes %}<li>{{ note }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>技術指標</h3>
+  <table>
+    <tr><td>MA5</td><td>{{ "%.2f"|format(r.ma5) }}</td>
+        <td>RSI14</td><td>{{ "%.1f"|format(r.rsi14) }}</td></tr>
+    <tr><td>MA20</td><td>{{ "%.2f"|format(r.ma20) }}</td>
+        <td>量比</td><td>{{ "%.2f"|format(r.volume_ratio) }}</td></tr>
+    {% if r.ma60 %}<tr><td>MA60</td><td>{{ "%.2f"|format(r.ma60) }}</td>
+        <td>ATR%</td><td>{{ "%.1f"|format(r.atr_pct) }}%</td></tr>{% endif %}
+    <tr><td>支撐</td><td>{{ "%.2f"|format(r.support_20d) }}</td>
+        <td>壓力</td><td>{{ "%.2f"|format(r.resistance_20d) }}</td></tr>
+  </table>
+</div>
+
+<script>
+var scores = [{{ r.trend_score }}, {{ r.momentum_score }}, {{ r.volume_score }}, {{ r.risk_score }}, {{ r.market_score }}];
+var labels = ['趨勢(30)', '動能(20)', '量能(20)', '風險(15)', '市場(10)'];
+var maxes  = [30, 20, 20, 15, 10];
+var pcts   = scores.map((s,i) => s/maxes[i]*100);
+Plotly.newPlot('sub-score-chart', [{
+  type: 'bar', x: labels, y: pcts,
+  marker: { color: pcts.map(p => p>=70?'#68d391':p>=40?'#f6ad55':'#fc8181') },
+  text: scores.map((s,i) => s+'/'+maxes[i]),
+  textposition: 'auto',
+}], {
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: '#e2e8f0' },
+  yaxis: { range: [0,100], title: '達成率 (%)' },
+  margin: { t: 10, b: 40, l: 40, r: 10 },
+  height: 180,
+}, { displayModeBar: false, responsive: true });
+</script>
+{% endif %}
+<p style="color:#4a5568; text-align:center; margin-top:32px; font-size:12px;">以上僅為量化技術觀察，不構成投資建議。</p>
+{% endblock %}

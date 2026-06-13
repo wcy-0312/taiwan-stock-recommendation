@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from app.linebot.commands import dispatch_command
-from app.linebot.notifier import reply_messages
+from app.linebot.notifier import reply_message_objects
 
 logger = logging.getLogger(__name__)
 
@@ -145,15 +145,16 @@ def _handle_event(event: dict) -> None:
     logger.info("Message from %s: %s", user_id, text[:80])
 
     # Dispatch to command handler
+    # dispatch_command returns list[dict] (LINE message objects)
     try:
-        reply_texts = dispatch_command(user_id, text)
+        reply_objects = dispatch_command(user_id, text)
     except Exception as exc:
         logger.error("dispatch_command error for user=%s text=%r: %s", user_id, text, exc)
-        reply_texts = ["抱歉，系統發生錯誤，請稍後再試。"]
+        reply_objects = [{"type": "text", "text": "抱歉，系統發生錯誤，請稍後再試。"}]
 
-    # Reply
-    if reply_token and reply_texts:
-        result = reply_messages(reply_token, reply_texts)
+    # Reply using message objects
+    if reply_token and reply_objects:
+        result = reply_message_objects(reply_token, reply_objects)
         if not result.get("success"):
             logger.error(
                 "Failed to reply to user=%s: status=%s error=%s",

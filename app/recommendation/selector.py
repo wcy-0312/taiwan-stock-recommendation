@@ -12,6 +12,8 @@ Selection categories:
 
 from __future__ import annotations
 
+from enum import Enum
+
 from app.scoring.models import StockRadarResult
 from app.config import (
     BASE_SCORE_STRONG_THRESHOLD,
@@ -21,6 +23,65 @@ from app.config import (
     WEAKNESS_ALERTS_MAX,
     WEAKNESS_ALERTS_BROADCAST_TOP,
 )
+
+
+class StockCategory(str, Enum):
+    STRONG_CONTINUE = "強勢延續"     # High score, stable trend, normal volume, low risk
+    JUST_TURNED_STRONG = "剛轉強"    # MACD flipped positive, reclaimed MA20, volume up
+    OVERHEATED = "過熱勿追"          # High score but RSI > 75 or near resistance
+    WEAKNESS_ALERT = "轉弱警示"      # Low base_score, broke MA20, MACD negative
+    WATCHING = "觀望整理"            # Mid-range score, mixed signals
+
+
+def categorize_stock(result) -> StockCategory:
+    """
+    Categorize a StockRadarResult into one of 5 product-facing categories.
+
+    Parameters
+    ----------
+    result : StockRadarResult
+
+    Returns
+    -------
+    StockCategory
+    """
+    from app.config import BASE_SCORE_STRONG_THRESHOLD, BASE_SCORE_WEAK_THRESHOLD
+
+    bs = result.base_score
+    rsi = result.rsi14
+    macd = result.macd_hist
+    macd_delta = result.macd_hist_delta
+
+    # Weakness alert: low base score
+    if bs <= BASE_SCORE_WEAK_THRESHOLD:
+        return StockCategory.WEAKNESS_ALERT
+
+    # Strong stocks — check sub-categories
+    if bs >= BASE_SCORE_STRONG_THRESHOLD:
+        # Overheated: RSI > 75 or near resistance
+        if rsi > 75 or (result.resistance_20d > 0 and result.latest_close / result.resistance_20d > 0.97):
+            return StockCategory.OVERHEATED
+        # Just turned strong: MACD just flipped positive (delta > 0 and macd was near 0)
+        if macd > 0 and macd_delta > 0 and abs(macd) < 1.0:
+            return StockCategory.JUST_TURNED_STRONG
+        # Default strong
+        return StockCategory.STRONG_CONTINUE
+
+    # Watching: mid range
+    return StockCategory.WATCHING
+
+
+def categorize_results(results: list) -> dict:
+    """
+    Group a list of StockRadarResult by StockCategory.
+
+    Returns dict mapping StockCategory -> list of results.
+    """
+    grouped = {cat: [] for cat in StockCategory}
+    for r in results:
+        cat = categorize_stock(r)
+        grouped[cat].append(r)
+    return grouped
 
 
 def select_strong_watchlist(

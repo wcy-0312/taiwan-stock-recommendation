@@ -228,6 +228,10 @@ app = FastAPI(
 from app.linebot.webhook import router as webhook_router  # noqa: E402
 app.include_router(webhook_router)
 
+# Mount web dashboard router
+from app.web.routes import router as web_router  # noqa: E402
+app.include_router(web_router)
+
 
 # ── Direct run (python -m app.main) ──────────────────────────────────────────
 

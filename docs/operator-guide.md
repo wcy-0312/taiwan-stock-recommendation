@@ -1,146 +1,64 @@
-# ART-007: Operator Deployment Guide
-# 台股智能推薦系統 — Final Configuration & Verification
+# 台股智能雷達 LINE Bot — Operator Guide
 
-> Checkpoint: 5 — Operator Deployment
-> Status: All code complete (ART-001 through ART-006 approved). One user action required: supply .env credentials.
-> Last pipeline run: 2026-06-13 — 49/50 tickers, 5 recommendations (3 BUY: 2412, 2884, 2891 / 2 SELL: 2330, 2317)
+## LINE OA 回應設定檢查（必讀）
 
----
+LINE Official Account Manager 設定路徑：
+LINE Official Account Manager → 設定 → 回應設定
 
-## Prerequisites
+必要設定：
+| 設定項目 | 正確值 | 說明 |
+|----------|--------|------|
+| Webhook | ✅ 開啟 | Bot 接收訊息的核心機制 |
+| 自動回應訊息 | ❌ 關閉 | 必須關閉，否則每則訊息都會收到官方制式回覆 |
+| AI 自動回應訊息 | ❌ 關閉 | 同上 |
+| 智能聊天 | ❌ 關閉 | 同上 |
+| 聊天 | 可選 | 開啟後可人工回覆，不影響 webhook |
+| 歡迎訊息 | 可保留 | 只在使用者加好友時觸發，不干擾 webhook |
 
-- Windows machine with Miniconda installed
-- conda environment `linebot` (Python 3.10.20) already configured
-- LINE Messaging API channel with:
-  - A Channel Access Token (from LINE Developers console)
-  - Your LINE User ID (the user to receive push messages)
+### Troubleshooting
 
----
-
-## Step 1 — Create the .env File
-
-Create a file named `.env` at the project root:
-
-```
-C:\Users\NM6124020\Desktop\Code\agent-organization-framework\.env
-```
-
-Contents (replace placeholders with your actual values):
-
-```
-LINE_CHANNEL_ACCESS_TOKEN=<your_channel_access_token_here>
-LINE_USER_ID=<your_line_user_id_here>
-```
-
-How to obtain these values:
-- LINE_CHANNEL_ACCESS_TOKEN: LINE Developers console → your channel → Messaging API tab → Channel access token (long-lived)
-- LINE_USER_ID: LINE Developers console → your channel → Messaging API tab → "Your user ID" field
-
-IMPORTANT: Never commit the .env file to git. It is listed in .gitignore (or should be added).
+**症狀：** 每次傳訊息都先收到「感謝您的訊息！很抱歉，本帳號無法個別回覆...」，然後才收到 bot 回覆。
+**原因：** LINE OA 的「自動回應訊息」未關閉。這不是 webhook 程式錯誤。
+**解決：** 到 LINE Official Account Manager → 設定 → 回應設定 → 自動回應訊息 → 關閉。
 
 ---
 
-## Step 2 — Verify Credentials
+## 環境變數
 
-Run this command to confirm credentials are correctly set:
-
-```
-PYTHONIOENCODING=utf-8 conda run -n linebot --no-capture-output python artifacts/checkpoint-4/ART-006/verify_live_send.py --check-env
-```
-
-Expected output:
-```
-[PASS] LINE_CHANNEL_ACCESS_TOKEN found: <masked>
-[PASS] LINE_USER_ID found: <your_id>
-[PASS] .env credentials look valid. Ready for live send test.
-```
+| 變數 | 必要 | 說明 |
+|------|------|------|
+| LINE_CHANNEL_ACCESS_TOKEN | ✅ | LINE Developers Console → Messaging API → Channel access token |
+| LINE_USER_ID | ✅ | 接收推播的使用者 LINE User ID |
+| LINE_CHANNEL_SECRET | ✅ | LINE Developers Console → Basic settings → Channel secret（webhook 簽名驗證用） |
+| PUBLIC_BASE_URL | 建議 | Web Dashboard 的公開 URL，例如 https://your-app.onrender.com |
+| PYTHONIOENCODING | 建議 | 設為 utf-8，避免 Windows 中文顯示問題 |
+| TZ | 建議 | 設為 Asia/Taipei，確保排程時間正確 |
 
 ---
 
-## Step 3 — Full End-to-End Verification (Checkpoint 4 Acceptance Criteria)
+## 部署 Checklist
 
-Run ART-006 in full mode to execute the complete pipeline and send a real LINE message:
-
-```
-PYTHONIOENCODING=utf-8 conda run -n linebot --no-capture-output python artifacts/checkpoint-4/ART-006/verify_live_send.py --full
-```
-
-This will:
-1. Fetch OHLCV data for 0050 component stocks (49/50 expected; 2888.TW is delisted and skipped)
-2. Compute MA crossover / RSI / MACD signals
-3. Select top 3-5 stocks by composite score
-4. Cache the formatted Chinese-language recommendation message
-5. Send the message to your LINE app via the Messaging API
-
-All five Checkpoint 4 acceptance criteria should print [PASS].
+- [ ] LINE OA 自動回應訊息已關閉
+- [ ] Webhook URL 已設為 `https://<your-app>.onrender.com/webhook`
+- [ ] Use webhook 已開啟
+- [ ] Webhook redelivery 已開啟（建議，避免冷啟動時漏失訊息）
+- [ ] Render 環境變數已設定（LINE_CHANNEL_ACCESS_TOKEN、LINE_USER_ID、LINE_CHANNEL_SECRET）
+- [ ] `GET /health` 回傳 `{"status":"ok"}`
 
 ---
 
-## Step 4 — Alternative: Send Cached Message Only
+## 本地開發
 
-If the analysis pipeline already ran today and the cache is fresh:
-
-```
-PYTHONIOENCODING=utf-8 conda run -n linebot --no-capture-output python artifacts/checkpoint-4/ART-006/verify_live_send.py --send-now
-```
-
-The cached message is stored at:
-```
-artifacts/checkpoint-3/ART-005/.scheduler-cache/pending-message.json
+```bash
+# 建立 .env
+cp .env.example .env
+# 填入真實憑證後：
+conda activate linebot
+uvicorn app.main:app --reload --port 8000
 ```
 
----
-
-## Step 5 — Start the Automated Scheduler
-
-Once credentials are verified and a test message is received, start the scheduler for daily automated operation:
-
+使用 ngrok 或 Render 測試 webhook：
+```bash
+ngrok http 8000
+# 將 https://<ngrok-url>/webhook 設為 LINE webhook URL
 ```
-PYTHONIOENCODING=utf-8 conda run -n linebot --no-capture-output python artifacts/checkpoint-3/ART-005/scheduler.py
-```
-
-The scheduler runs two jobs each weekday:
-- 14:00 CST — Analysis pipeline (fetches data, computes signals, caches recommendation message)
-- 08:30 CST — LINE push notification (sends cached message to your LINE app)
-
-IMPORTANT: The machine must remain running for the scheduler to fire. There is no built-in restart-on-failure or Windows Task Scheduler integration in the current MVP.
-
-CLI flags for manual testing:
-- `--analysis-now` : Run the analysis pipeline immediately (does not wait for 14:00)
-- `--send-now`     : Send the cached message immediately (does not wait for 08:30)
-- `--dry-run`      : Run analysis only, print message to console, do not send LINE message
-
----
-
-## Artifact Map
-
-| Artifact | Path | Purpose |
-|----------|------|---------|
-| ART-001 | artifacts/checkpoint-1/ART-001/data_pipeline.py | Fetches OHLCV data via yfinance |
-| ART-002 | artifacts/checkpoint-1/ART-002/analysis_engine.py | MA crossover / RSI / MACD signals + composite score |
-| ART-003 | artifacts/checkpoint-2/ART-003/recommendation_generator.py | Top stock selection + Chinese plain-language explanations |
-| ART-004 | artifacts/checkpoint-2/ART-004/line_notifier.py | LINE Messaging API push notification |
-| ART-005 | artifacts/checkpoint-3/ART-005/scheduler.py | APScheduler daily jobs (entry point for production use) |
-| ART-006 | artifacts/checkpoint-4/ART-006/verify_live_send.py | Acceptance-criteria runner (use to verify end-to-end) |
-| .env.example | artifacts/checkpoint-2/ART-004/.env.example | Template showing required credential fields |
-
----
-
-## Known Limitations
-
-| Issue | Severity | Workaround |
-|-------|----------|------------|
-| 2888.TW (新光金) not found by yfinance — possibly delisted | Minor | Pipeline skips gracefully; ticker list in ART-001 may need periodic updates |
-| Scheduler requires machine to stay running | Minor | Consider Windows Task Scheduler or a dedicated server for production |
-| PYTHONIOENCODING=utf-8 must be set for Windows Chinese output | Minor | Always use the conda run command forms shown above |
-| Cache key is today's date; stale cache from yesterday is not sent automatically | Minor | Run --analysis-now before --send-now if using on a new day without scheduler |
-
----
-
-## Mission Success Definition
-
-The mission (mission-contract.md) is satisfied when:
-- ART-006 --full returns [PASS] for all 5 acceptance criteria, AND
-- The user confirms receiving a LINE message containing: today's date, top stock tickers, BUY/SELL labels, Chinese plain-language explanations, and disclaimer
-
-No further agent checkpoints are required after this confirmation.

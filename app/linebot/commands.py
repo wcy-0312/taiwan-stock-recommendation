@@ -4,56 +4,64 @@ app/linebot/commands.py — Parse and dispatch LINE Bot interactive commands.
 Supported commands (case-insensitive, leading/trailing whitespace ignored):
 
     查 <CODE>       — Query latest radar result for a stock code
+    <4-digit>       — Bare 4-digit number treated as alias for 查 <CODE>
     今日雷達         — Return today's broadcast summary from cache
+    強勢股           — Top 5 bullish stocks from latest cache
+    轉弱股           — Top 5 bearish stocks from latest cache
+    熱門股票         — Hot stocks quick-access menu
+    可查股票         — List first 20 tickers in the universe
     追蹤 <CODE>     — Add a stock to the user's watchlist
     移除 <CODE>     — Remove a stock from the user's watchlist
-    我的清單        — List the user's watchlist
-    幫助 / help    — Return the help text
+    我的清單         — List the user's watchlist (with radar data when available)
+    幫助 / help     — Return the help text
+    你好 / 嗨 / hi  — Greeting
 
-Unknown messages return the help text so the bot is never silent.
+Unknown messages return a friendly prompt with Quick Reply.
+
+dispatch_command() returns list[dict] — each element is a LINE message object
+(type: text, flex, etc.) ready to be passed directly to the Messaging API.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime
 from typing import Optional
 
 from app.linebot.watchlist import add_ticker, remove_ticker, get_watchlist
+from app.linebot.flex_templates import (
+    greeting_message,
+    help_message,
+    unknown_command_message,
+    stock_not_found_message,
+    hot_stocks_message,
+    HOME_QUICK_REPLY,
+    quick_reply,
+    quick_reply_item,
+    stock_summary_flex,
+    watchlist_flex,
+)
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Help text
-# ---------------------------------------------------------------------------
-
-HELP_TEXT = (
-    "【台股技術雷達 指令說明】\n"
-    "─────────────────\n"
-    "查 <代號>       查詢個股雷達分析\n"
-    "                例：查 2330\n"
-    "今日雷達         今日播報摘要\n"
-    "追蹤 <代號>     加入我的追蹤清單\n"
-    "                例：追蹤 2330\n"
-    "移除 <代號>     從清單移除\n"
-    "                例：移除 2330\n"
-    "我的清單         查看追蹤清單\n"
-    "幫助 / help     顯示此說明\n"
-    "─────────────────\n"
-    "以上僅為量化技術觀察，不構成投資建議。"
-)
 
 # ---------------------------------------------------------------------------
 # Command patterns
 # ---------------------------------------------------------------------------
 
 _RE_QUERY = re.compile(r"^查\s+([A-Za-z0-9]+\.?[A-Za-z]*)$", re.UNICODE)
+_RE_BARE_CODE = re.compile(r"^\d{4}$", re.UNICODE)          # bare 4-digit: "2330"
 _RE_ADD = re.compile(r"^追蹤\s+([A-Za-z0-9]+\.?[A-Za-z]*)$", re.UNICODE)
 _RE_REMOVE = re.compile(r"^移除\s+([A-Za-z0-9]+\.?[A-Za-z]*)$", re.UNICODE)
 _RE_WATCHLIST = re.compile(r"^我的清單$", re.UNICODE)
 _RE_TODAY_RADAR = re.compile(r"^今日雷達$", re.UNICODE)
-_RE_HELP = re.compile(r"^(幫助|help|Help|HELP)$", re.UNICODE)
+_RE_STRONG = re.compile(r"^強勢股$", re.UNICODE)
+_RE_WEAK = re.compile(r"^轉弱股$", re.UNICODE)
+_RE_HOT = re.compile(r"^熱門股票$", re.UNICODE)
+_RE_LIST_UNIVERSE = re.compile(r"^可查股票$", re.UNICODE)
+_RE_HELP = re.compile(r"^(幫助|help|Help|HELP|功能|怎麼用)$", re.UNICODE)
+_RE_GREET = re.compile(r"^(你好|嗨|hi|hello|哈囉|Hello|HI|HELLO)$", re.UNICODE | re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -73,8 +81,16 @@ def _normalise_code(raw: str) -> str:
     return code
 
 
+def _text_msg(text: str, quick_reply_obj: Optional[dict] = None) -> dict:
+    """Build a plain text LINE message object, optionally with a quickReply."""
+    msg: dict = {"type": "text", "text": text}
+    if quick_reply_obj:
+        msg["quickReply"] = quick_reply_obj
+    return msg
+
+
 # ---------------------------------------------------------------------------
-# Lazy pipeline import
+# Cache helpers
 # ---------------------------------------------------------------------------
 
 def _get_cached_radar(ticker: str) -> Optional[object]:
@@ -82,7 +98,7 @@ def _get_cached_radar(ticker: str) -> Optional[object]:
     Try to load the most recent cached analysis result for a ticker.
 
     Searches data/cache/analysis_<date>.json (most recent first).
-    Returns a StockRadarResult-like dict or None if not found.
+    Returns a StockRadarResult-like object or None if not found.
     """
     try:
         from app.config import CACHE_DIR
@@ -90,12 +106,10 @@ def _get_cached_radar(ticker: str) -> Optional[object]:
 
         cache_files = sorted(CACHE_DIR.glob("analysis_*.json"), reverse=True)
         for cache_file in cache_files[:3]:  # check last 3 days
-            import json
             with cache_file.open(encoding="utf-8") as fh:
                 data = json.load(fh)
             for r in data.get("results", []):
                 if r.get("ticker", "").upper() == ticker.upper():
-                    # Reconstruct as StockRadarResult
                     return StockRadarResult(
                         ticker=r["ticker"],
                         code=r.get("code", ticker.replace(".TW", "")),
@@ -140,10 +154,10 @@ def _get_cached_radar(ticker: str) -> Optional[object]:
     return None
 
 
-def _get_today_cached_summary() -> Optional[str]:
+def _get_today_cache_raw() -> Optional[dict]:
     """
-    Load today's broadcast summary from cache.
-    Returns a single string or None.
+    Load today's raw cache dict or None if not available.
+    Returns the parsed JSON dict (keys: market_stats, results).
     """
     try:
         from app.config import CACHE_DIR
@@ -151,13 +165,27 @@ def _get_today_cached_summary() -> Optional[str]:
         cache_file = CACHE_DIR / f"analysis_{today}.json"
         if not cache_file.exists():
             return None
-        import json
         with cache_file.open(encoding="utf-8") as fh:
-            data = json.load(fh)
+            return json.load(fh)
+    except Exception as exc:
+        logger.warning("_get_today_cache_raw: error — %s", exc)
+        return None
+
+
+def _get_today_cached_summary() -> Optional[str]:
+    """
+    Load today's broadcast summary from cache.
+    Returns a formatted string or None.
+    """
+    try:
+        today = datetime.today().strftime("%Y-%m-%d")
+        data = _get_today_cache_raw()
+        if data is None:
+            return None
+
         market_stats = data.get("market_stats", {})
         results_raw = data.get("results", [])
 
-        # Reconstruct SelectionResult-like info from cache for quick summary
         bull_count = int(market_stats.get("bullish_count") or 0)
         universe_size = int(market_stats.get("universe_size") or len(results_raw))
         mkt_score = int(market_stats.get("market_score") or 5)
@@ -194,13 +222,92 @@ def _get_today_cached_summary() -> Optional[str]:
         return None
 
 
+def _get_strong_stocks(top_n: int = 5) -> list[dict]:
+    """
+    Return top N bullish stocks from the most recent cache file.
+    Each item is a raw result dict from the cache JSON.
+    """
+    try:
+        from app.config import CACHE_DIR
+        cache_files = sorted(CACHE_DIR.glob("analysis_*.json"), reverse=True)
+        for cache_file in cache_files[:3]:
+            with cache_file.open(encoding="utf-8") as fh:
+                data = json.load(fh)
+            results = data.get("results", [])
+            bullish = [r for r in results if r.get("direction") == "bullish"]
+            # Sort by radar_score descending
+            bullish.sort(key=lambda r: int(r.get("radar_score") or 0), reverse=True)
+            if bullish:
+                return bullish[:top_n]
+    except Exception as exc:
+        logger.warning("_get_strong_stocks: error — %s", exc)
+    return []
+
+
+def _get_weak_stocks(top_n: int = 5) -> list[dict]:
+    """
+    Return top N bearish stocks from the most recent cache file.
+    Each item is a raw result dict from the cache JSON.
+    """
+    try:
+        from app.config import CACHE_DIR
+        cache_files = sorted(CACHE_DIR.glob("analysis_*.json"), reverse=True)
+        for cache_file in cache_files[:3]:
+            with cache_file.open(encoding="utf-8") as fh:
+                data = json.load(fh)
+            results = data.get("results", [])
+            bearish = [r for r in results if r.get("direction") == "bearish"]
+            # Sort by radar_score ascending (weakest first)
+            bearish.sort(key=lambda r: int(r.get("radar_score") or 0))
+            if bearish:
+                return bearish[:top_n]
+    except Exception as exc:
+        logger.warning("_get_weak_stocks: error — %s", exc)
+    return []
+
+
+def _load_universe_tickers() -> list[str]:
+    """
+    Load ticker codes from the TW0050 universe file.
+    Returns a list of bare codes (without .TW suffix) sorted alphabetically.
+    """
+    try:
+        from app.config import TW0050_UNIVERSE_PATH
+        with TW0050_UNIVERSE_PATH.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        # Universe file may be a list of strings or list of dicts with "ticker" key
+        if isinstance(data, list):
+            tickers = []
+            for item in data:
+                if isinstance(item, str):
+                    tickers.append(item.replace(".TW", "").strip())
+                elif isinstance(item, dict):
+                    code = item.get("code") or item.get("ticker", "")
+                    tickers.append(code.replace(".TW", "").strip())
+            return [t for t in tickers if t]
+        elif isinstance(data, dict):
+            # might have {"tickers": [...]}
+            raw = data.get("tickers", data.get("stocks", []))
+            tickers = []
+            for item in raw:
+                if isinstance(item, str):
+                    tickers.append(item.replace(".TW", "").strip())
+                elif isinstance(item, dict):
+                    code = item.get("code") or item.get("ticker", "")
+                    tickers.append(code.replace(".TW", "").strip())
+            return [t for t in tickers if t]
+    except Exception as exc:
+        logger.warning("_load_universe_tickers: could not load universe — %s", exc)
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Command dispatcher
 # ---------------------------------------------------------------------------
 
-def dispatch_command(user_id: str, text: str) -> list[str]:
+def dispatch_command(user_id: str, text: str) -> list[dict]:
     """
-    Parse a LINE message text and return a list of reply strings.
+    Parse a LINE message text and return a list of LINE message objects.
 
     Parameters
     ----------
@@ -209,35 +316,56 @@ def dispatch_command(user_id: str, text: str) -> list[str]:
 
     Returns
     -------
-    list[str] — one or more reply message strings (each <= 5000 chars)
+    list[dict] — one or more LINE message dicts (type: text / flex / etc.)
+                 Each dict is ready to be sent as-is via the Messaging API.
     """
     text = text.strip()
+
+    # ── Greeting ─────────────────────────────────────────────────────────────
+    if _RE_GREET.match(text):
+        return [greeting_message()]
+
+    # ── 幫助 / help ──────────────────────────────────────────────────────────
+    if _RE_HELP.match(text):
+        return [help_message()]
 
     # ── 查 <CODE> ────────────────────────────────────────────────────────────
     m = _RE_QUERY.match(text)
     if m:
         raw_code = m.group(1)
-        ticker = _normalise_code(raw_code)
-        result = _get_cached_radar(ticker)
-        if result is None:
-            return [
-                f"找不到 {raw_code} 的最新雷達資料。\n"
-                "請確認代號是否正確，或稍後再試。\n"
-                f"（查詢範圍：台灣0050成分股）"
-            ]
-        from app.recommendation.formatter import format_single_stock_query
-        return [format_single_stock_query(result)]
+        return _handle_stock_query(raw_code)
+
+    # ── Bare 4-digit code (e.g. "2330" → alias for "查 2330") ───────────────
+    if _RE_BARE_CODE.match(text):
+        return _handle_stock_query(text)
 
     # ── 今日雷達 ─────────────────────────────────────────────────────────────
     if _RE_TODAY_RADAR.match(text):
         summary = _get_today_cached_summary()
         if summary is None:
             today = datetime.today().strftime("%Y-%m-%d")
-            return [
+            return [_text_msg(
                 f"今日（{today}）的雷達資料尚未就緒。\n"
-                "分析通常在每日 14:00 CST 後更新。"
-            ]
-        return [summary]
+                "分析通常在每日 14:00 CST 後更新。",
+                HOME_QUICK_REPLY,
+            )]
+        return [_text_msg(summary, HOME_QUICK_REPLY)]
+
+    # ── 強勢股 ───────────────────────────────────────────────────────────────
+    if _RE_STRONG.match(text):
+        return _handle_strong_stocks()
+
+    # ── 轉弱股 ───────────────────────────────────────────────────────────────
+    if _RE_WEAK.match(text):
+        return _handle_weak_stocks()
+
+    # ── 熱門股票 ─────────────────────────────────────────────────────────────
+    if _RE_HOT.match(text):
+        return [hot_stocks_message()]
+
+    # ── 可查股票 ─────────────────────────────────────────────────────────────
+    if _RE_LIST_UNIVERSE.match(text):
+        return _handle_list_universe()
 
     # ── 追蹤 <CODE> ──────────────────────────────────────────────────────────
     m = _RE_ADD.match(text)
@@ -246,9 +374,15 @@ def dispatch_command(user_id: str, text: str) -> list[str]:
         ticker = _normalise_code(raw_code)
         added = add_ticker(user_id, ticker)
         if added:
-            return [f"✅ 已將 {ticker} 加入追蹤清單。\n輸入「我的清單」查看所有追蹤股票。"]
+            return [_text_msg(
+                f"✅ 已將 {ticker} 加入追蹤清單。\n輸入「我的清單」查看所有追蹤股票。",
+                HOME_QUICK_REPLY,
+            )]
         else:
-            return [f"ℹ️ {ticker} 已在您的追蹤清單中。"]
+            return [_text_msg(
+                f"ℹ️ {ticker} 已在您的追蹤清單中。",
+                HOME_QUICK_REPLY,
+            )]
 
     # ── 移除 <CODE> ──────────────────────────────────────────────────────────
     m = _RE_REMOVE.match(text)
@@ -257,30 +391,158 @@ def dispatch_command(user_id: str, text: str) -> list[str]:
         ticker = _normalise_code(raw_code)
         removed = remove_ticker(user_id, ticker)
         if removed:
-            return [f"✅ 已從追蹤清單移除 {ticker}。"]
+            return [_text_msg(
+                f"✅ 已從追蹤清單移除 {ticker}。",
+                HOME_QUICK_REPLY,
+            )]
         else:
-            return [f"ℹ️ {ticker} 不在您的追蹤清單中。"]
+            return [_text_msg(
+                f"ℹ️ {ticker} 不在您的追蹤清單中。",
+                HOME_QUICK_REPLY,
+            )]
 
     # ── 我的清單 ─────────────────────────────────────────────────────────────
     if _RE_WATCHLIST.match(text):
-        tickers = get_watchlist(user_id)
-        if not tickers:
-            return [
-                "您的追蹤清單目前是空的。\n"
-                "輸入「追蹤 <代號>」（例：追蹤 2330）即可加入。"
-            ]
-        lines = ["📋 我的追蹤清單", "─" * 20]
-        for i, t in enumerate(tickers, 1):
-            lines.append(f"  {i}. {t}")
-        lines.append("─" * 20)
-        lines.append(f"共 {len(tickers)} 支\n輸入「移除 <代號>」可從清單中移除。")
-        return ["\n".join(lines)]
-
-    # ── 幫助 / help ──────────────────────────────────────────────────────────
-    if _RE_HELP.match(text):
-        return [HELP_TEXT]
+        return _handle_watchlist(user_id)
 
     # ── Fallback: unknown command ─────────────────────────────────────────────
-    return [
-        f"指令「{text[:20]}」無法識別。\n\n{HELP_TEXT}"
-    ]
+    return [unknown_command_message(text)]
+
+
+# ---------------------------------------------------------------------------
+# Sub-handlers (keep dispatch_command readable)
+# ---------------------------------------------------------------------------
+
+def _handle_stock_query(raw_code: str) -> list[dict]:
+    """Handle 查 <CODE> and bare 4-digit lookups."""
+    ticker = _normalise_code(raw_code)
+    result = _get_cached_radar(ticker)
+    if result is None:
+        return [stock_not_found_message(raw_code.upper())]
+
+    # Build after-query Quick Reply
+    code = getattr(result, "code", raw_code.upper())
+    after_qr = quick_reply([
+        quick_reply_item("📊 今日雷達", "今日雷達"),
+        quick_reply_item("🏆 強勢股", "強勢股"),
+        quick_reply_item("📋 我的清單", "我的清單"),
+        quick_reply_item(f"🔖 追蹤 {code}", f"追蹤 {code}"),
+    ])
+    flex = stock_summary_flex(result, add_watchlist_btn=True)
+    # Attach Quick Reply to the flex message
+    flex["quickReply"] = after_qr
+    return [flex]
+
+
+def _handle_strong_stocks() -> list[dict]:
+    """Return top 5 bullish stocks text + Quick Reply to query each."""
+    stocks = _get_strong_stocks(top_n=5)
+    if not stocks:
+        today = datetime.today().strftime("%Y-%m-%d")
+        return [_text_msg(
+            f"今日（{today}）強勢股資料尚未就緒，請稍後再試。\n"
+            "分析通常在每日 14:00 CST 後更新。",
+            HOME_QUICK_REPLY,
+        )]
+
+    lines = ["🏆 強勢股 Top 5", "─" * 20]
+    qr_items = []
+    for i, r in enumerate(stocks, 1):
+        code = r.get("code", "")
+        name = r.get("name", code)
+        rs = int(r.get("radar_score") or 0)
+        conf = r.get("confidence", "低")
+        lines.append(f"#{i} {code} {name}  雷達:{rs}  信心:{conf}")
+        if code:
+            qr_items.append(quick_reply_item(f"🔍 {code}", f"查 {code}"))
+    lines.append("─" * 20)
+    lines.append("以上僅為量化技術觀察，不構成投資建議。")
+
+    # Add home shortcuts after stock items (cap at 13 total)
+    qr_items.append(quick_reply_item("⚠️ 轉弱股", "轉弱股"))
+    qr_items.append(quick_reply_item("📊 今日雷達", "今日雷達"))
+
+    return [_text_msg("\n".join(lines), quick_reply(qr_items))]
+
+
+def _handle_weak_stocks() -> list[dict]:
+    """Return top 5 bearish stocks text + Quick Reply to query each."""
+    stocks = _get_weak_stocks(top_n=5)
+    if not stocks:
+        today = datetime.today().strftime("%Y-%m-%d")
+        return [_text_msg(
+            f"今日（{today}）轉弱股資料尚未就緒，請稍後再試。\n"
+            "分析通常在每日 14:00 CST 後更新。",
+            HOME_QUICK_REPLY,
+        )]
+
+    lines = ["⚠️ 轉弱股 Top 5", "─" * 20]
+    qr_items = []
+    for i, r in enumerate(stocks, 1):
+        code = r.get("code", "")
+        name = r.get("name", code)
+        rs = int(r.get("radar_score") or 0)
+        lines.append(f"#{i} {code} {name}  雷達:{rs}")
+        if code:
+            qr_items.append(quick_reply_item(f"🔍 {code}", f"查 {code}"))
+    lines.append("─" * 20)
+    lines.append("以上僅為量化技術觀察，不構成投資建議。")
+
+    qr_items.append(quick_reply_item("🏆 強勢股", "強勢股"))
+    qr_items.append(quick_reply_item("📊 今日雷達", "今日雷達"))
+
+    return [_text_msg("\n".join(lines), quick_reply(qr_items))]
+
+
+def _handle_watchlist(user_id: str) -> list[dict]:
+    """Handle 我的清單 — show watchlist with radar data when available."""
+    tickers = get_watchlist(user_id)
+    if not tickers:
+        return [_text_msg(
+            "您的追蹤清單目前是空的。\n"
+            "輸入「追蹤 <代號>」（例：追蹤 2330）即可加入。",
+            HOME_QUICK_REPLY,
+        )]
+
+    # Try to fetch cached radar data for each ticker
+    results: dict = {}
+    for ticker in tickers:
+        r = _get_cached_radar(ticker)
+        if r is not None:
+            results[ticker] = r
+
+    if results:
+        # Use flex carousel when radar data is available
+        flex = watchlist_flex(tickers, results)
+        flex["quickReply"] = HOME_QUICK_REPLY
+        return [flex]
+
+    # Fallback: plain text list when no cache data available
+    lines = ["📋 我的追蹤清單", "─" * 20]
+    for i, t in enumerate(tickers, 1):
+        lines.append(f"  {i}. {t}")
+    lines.append("─" * 20)
+    lines.append(f"共 {len(tickers)} 支\n輸入「移除 <代號>」可從清單中移除。")
+    return [_text_msg("\n".join(lines), HOME_QUICK_REPLY)]
+
+
+def _handle_list_universe() -> list[dict]:
+    """Handle 可查股票 — list first 20 tickers with Quick Reply for each."""
+    tickers = _load_universe_tickers()
+    if not tickers:
+        return [_text_msg(
+            "目前無法取得可查股票清單，請稍後再試。",
+            HOME_QUICK_REPLY,
+        )]
+
+    display = tickers[:20]
+    lines = [f"📋 可查股票（共 {len(tickers)} 支，顯示前 20）", "─" * 20]
+    for t in display:
+        lines.append(f"  {t}")
+    lines.append("─" * 20)
+    lines.append("輸入「查 <代號>」或直接輸入 4 位數代號查詢個股。")
+
+    qr_items = [quick_reply_item(f"🔍 {t}", f"查 {t}") for t in display[:11]]
+    qr_items.append(quick_reply_item("📊 今日雷達", "今日雷達"))
+
+    return [_text_msg("\n".join(lines), quick_reply(qr_items))]

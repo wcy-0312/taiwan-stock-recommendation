@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}台股智能雷達{% endblock %}</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.6; }
+.container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+nav { background: #1a1d2e; padding: 12px 24px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 24px; }
+nav a { color: #90cdf4; text-decoration: none; font-size: 14px; }
+nav .brand { font-weight: bold; font-size: 18px; color: #63b3ed; }
+.card { background: #1a1d2e; border: 1px solid #2d3748; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+.badge-bull { background: #1c4532; color: #68d391; }
+.badge-bear { background: #4a1d1d; color: #fc8181; }
+.badge-neutral { background: #2d3748; color: #a0aec0; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 8px; border-bottom: 2px solid #2d3748; color: #90cdf4; }
+td { padding: 8px; border-bottom: 1px solid #2d3748; }
+tr:hover td { background: #2d3748; }
+.score-bar { display: inline-block; width: 60px; height: 8px; border-radius: 4px; background: #2d3748; vertical-align: middle; margin-right: 6px; overflow: hidden; }
+.score-bar-fill { height: 100%; border-radius: 4px; }
+h1, h2, h3 { color: #90cdf4; margin-bottom: 12px; }
+.empty-state { text-align: center; padding: 48px; color: #718096; }
+a { color: #90cdf4; }
+.btn { display: inline-block; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 13px; background: #2b6cb0; color: white; }
+.btn:hover { background: #2c5282; }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<nav>
+  <span class="brand">📊 台股智能雷達</span>
+  <a href="/">首頁</a>
+  <a href="/dashboard">今日雷達</a>
+  <a href="/api/radar/latest">API</a>
+</nav>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>
